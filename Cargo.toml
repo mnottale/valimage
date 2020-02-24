@@ -1,0 +1,22 @@
+[package]
+
+name = "valimage"
+version = "0.1.0"
+authors = [
+    "Matthieu Nottale <matthieu@nottale.net>",
+]
+
+edition = "2018"
+
+[[bin]]
+name = "valimage"
+
+[dependencies]
+
+tokio = { version = "0.2", features = ["macros"] }
+warp = "0.2"
+tokio-postgres = "0.5.2"
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_derive = "1.0"
