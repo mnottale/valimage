@@ -17,6 +17,11 @@ tokio = { version = "0.2", features = ["macros"] }
 warp = "0.2"
 tokio-postgres = "0.5.2"
 serde = { version = "1.0", features = ["derive"] }
+headers = "0.3.1"
+sha2 = "*"
+hex = "*"
+rand = "0.7.3"
+bytes = "*"
 
 [dev-dependencies]
 serde_derive = "1.0"

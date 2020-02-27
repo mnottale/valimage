@@ -1,0 +1,170 @@
+<html>
+<head>
+<script language="javascript">
+
+// we keep those for credentials refresh
+login=""
+password="";
+role="guest";
+
+
+function apiCall(route, payload, handler, onError) {
+    fetch(route, {
+            credentials: 'include',
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'application/json'},
+    }).then(function(response) {
+        if (!response.ok) {
+            // FIXME check 403 and transparent reconnect
+            if (onError)
+                onError(response.status);
+            else
+                handleGenericError(response.status);
+            throw new Error('bronk');
+        }
+        return response.json();
+    })
+    .then(function(j) {
+            handler(j);
+    });
+}
+
+function handleGenericError(status) {
+    bannerFail("error: " + status);
+}
+
+function bannerHide() {
+    var b = document.getElementById("dBanner");
+    b.style.visibility = 'hidden';
+}
+
+function bannerOk(msg) {
+    var b = document.getElementById("dBanner");
+    b.style.visibility = 'visible';
+    b.className = "bannerOk";
+    b.innerText = msg;
+}
+
+function bannerFail(msg) {
+    var b = document.getElementById("dBanner");
+    b.style.visibility = 'visible';
+    b.className = "bannerFail";
+    b.innerText = msg;
+}
+
+function onLoad() {
+    
+}
+
+function showRole(username, role) {
+    document.getElementById("dRole").style.visibility = 'visible';
+    document.getElementById("dRoleUsername").innerText = username;
+    document.getElementById("dRoleRole").innerText = role;
+}
+function showReviewer() {
+    document.getElementById("dMenuReviewer").style.visibility = 'visible';
+    document.getElementById("dLogin").style.visibility = 'hidden';
+}
+function showUser() {
+    document.getElementById("dMenuUser").style.visibility = 'visible';
+    document.getElementById("dLogin").style.visibility = 'hidden';
+}
+
+function showImages(imgs) {
+    var content = "";
+    for (idx in imgs) {
+        var ima = imgs[idx];
+        content += '<span style="border: 1px solid black;">';
+        content += '<img height="200" src="' + ima.key + '">';
+        content += '</span>';
+    }
+    document.getElementById("dImages").innerHTML = content;
+}
+
+function fetchRole() {
+    apiCall("/api/authinfo", {}, function(ai) {
+            showRole(ai.username, ai.role);
+            role = ai.role;
+            if (ai.role == "admin" || ai.role == "reviewer") {
+                showReviewer();
+            }
+            else if (ai.role == "user") {
+                showUser();
+            }
+    });
+}
+
+function doUpload() {
+    var fileelem = document.getElementById("iFile");
+    fetch("/api/upload", {
+            credentials: 'include',
+            method: 'POST',
+            body: fileelem.files[0]
+    }).then(function(response) {
+        if (!response.ok)
+            bannerFail("upload failed");
+        else
+            bannerOk("upload successful");
+    });
+}
+
+function doLogin() {
+    apiCall("/api/login", {
+            login: document.getElementById("iLogin").value,
+            password: document.getElementById("iPassword").value
+        }, function(res) {
+            if (res) {
+                bannerOk("logged in successfuly");
+                fetchRole();
+            } else {
+                bannerFail("Login failure");
+            }
+        });
+}
+
+function doMyImages() {
+    apiCall("/api/myimages", {limit: 100, offset: 0}, function(res) {
+            showImages(res);
+    });
+}
+</script>
+</head>
+
+<body>
+<div id="dBanner" style="visibility:hidden">
+</div>
+
+
+<div id="dRole" style="visibility:hidden">
+  Logged as <span id="dRoleUsername"></span>  with role <span id="dRoleRole"></span>
+</div>
+
+
+<div id="dMenuReviewer" style="visibility:hidden">
+Review menu
+</div>
+
+
+<div id="dMenuUser" style="visibility:hidden">
+User menu
+<button type="button" onclick="doMyImages()">My images</button>
+</div>
+
+<div id="dUpload">
+ Select file to upload: <br/>
+ <input type="file" id="iFile" name="file">
+ <button type="button" onclick="doUpload()">UPLOAD</button>
+</div>
+
+<div id="dLogin">
+  Please login: <br/>
+  <input type="text" id="iLogin" placeholder="login"><br>
+  <input type="password" id="iPassword" placeholder="password"><br/>
+  <button type="button" onclick="doLogin()">GO </button>
+</div>
+
+<div id="dImages" style="display:flex;">
+</div>
+</body>
+</html>
