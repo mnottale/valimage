@@ -11,9 +11,8 @@ pub struct Login {
 
 #[derive(Deserialize, Serialize)]
 pub struct ValidationResult {
-    pub uid: u32,
-    pub accept: bool,
-    pub reason: u32,
+    pub id: u32,
+    pub response: u32,
 }
 
 #[derive(Deserialize, Serialize)]

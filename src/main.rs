@@ -29,7 +29,7 @@ mod auth;
 use storage::Storage;
 use auth::{Authenticator, AuthenticatorDemo};
 use serde::{Deserialize, Serialize};
-use types::{Page};
+use types::{Page, ValidationResult};
 //use database;
 //use storage;
 
@@ -80,6 +80,34 @@ async fn api_myimages(page: Page, ai: AuthInfo, db: DB, storages: Arc<Storages>)
         entry.key = stor.urlFor(&entry.key);
     }
     return Ok(warp::reply::json(&res));
+}
+
+async fn api_images_to_validate(page: Page, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
+    if ai.role != "reviewer" {
+        let empty : Vec<i32> = Vec::new();
+        return Ok(warp::reply::json(&empty));
+    }
+    let mut res = db.lock().await.pendingValidation(page).await;
+    for entry in &mut res {
+        let stor = match entry.validated {
+            0 => &storages.storageValidated,
+            _ => &storages.storagePending,
+        };
+        entry.key = stor.urlFor(&entry.key);
+    }
+    return Ok(warp::reply::json(&res));
+}
+
+async fn api_reply(vr: ValidationResult, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
+    if ai.role != "reviewer" {
+        return Ok(warp::reply::json(&false));
+    }
+    let key = db.lock().await.setResponse(vr.id, vr.response).await;
+    if vr.response == 0 {
+        // TODO proper move api storage dependent
+        std::fs::rename(format!("store/pending/{}", &key), format!("store/live/{}", &key));
+    }
+    return Ok(warp::reply::json(&true));
 }
 
 async fn api_by_user(usr: u32, validated: bool, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
@@ -225,6 +253,18 @@ async fn main() {
         .and(with_db(db.clone()))
         .and(with_storages(storages.clone()))
         .and_then(api_myimages);
+    let r_api_images_to_validate = warp::path!("api" / "imagespending")
+        .and(warp::body::json())
+        .and(with_auth(&"SUPERDUPERSECRET".to_string()))
+        .and(with_db(db.clone()))
+        .and(with_storages(storages.clone()))
+        .and_then(api_images_to_validate);
+    let r_api_reply = warp::path!("api" / "reply")
+        .and(warp::body::json())
+        .and(with_auth(&"SUPERDUPERSECRET".to_string()))
+        .and(with_db(db.clone()))
+        .and(with_storages(storages.clone()))
+        .and_then(api_reply);
     let r_api_upload = warp::path!("api" / "upload")
         .and(warp::body::bytes())
         .and(with_auth(&"SUPERDUPERSECRET".to_string()))
@@ -242,6 +282,8 @@ async fn main() {
           .or(r_api_authinfo)
           .or(r_api_upload)
           .or(r_api_myimages)
+          .or(r_api_images_to_validate)
+          .or(r_api_reply)
           .or(r_index)
           .or(r_imgs_pending)
           .or(r_imgs_live))

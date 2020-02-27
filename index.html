@@ -7,6 +7,11 @@ login=""
 password="";
 role="guest";
 
+imageMenu = {
+    "user": '<button type="button" onclick="doDelete(this)">Delete</button>',
+    "reviewer": '<button type="button" id=@ID onclick="doAccept(this)">Accept</button><button type="button" id=@ID onclick="doDecline(this)">Decline</button>'
+}
+
 
 function apiCall(route, payload, handler, onError) {
     fetch(route, {
@@ -75,8 +80,14 @@ function showImages(imgs) {
     var content = "";
     for (idx in imgs) {
         var ima = imgs[idx];
-        content += '<span style="border: 1px solid black;">';
+        var color = "black";
+        if (ima.validated == 0)
+            color = "green";
+        if (ima.validated > 0)
+            color = "red";
+        content += '<span id="' + ima.id + '" onmouseout="doImageMenuHide(this)" onmouseover="doImageMenu(this)" style="border: 2px solid ' + color + ' ;">';
         content += '<img height="200" src="' + ima.key + '">';
+        content += '<div></div>';
         content += '</span>';
     }
     document.getElementById("dImages").innerHTML = content;
@@ -93,6 +104,19 @@ function fetchRole() {
                 showUser();
             }
     });
+}
+
+
+function doImageMenu(span)
+{
+    span.children[0].height = 180;
+    span.children[1].innerHTML = imageMenu[role].replace("@ID", span.id).replace("@ID", span.id);
+}
+
+function doImageMenuHide(span)
+{
+    span.children[1].innerHTML = '';
+    span.children[0].height = 200;
 }
 
 function doUpload() {
@@ -128,6 +152,26 @@ function doMyImages() {
             showImages(res);
     });
 }
+function doPendingImages() {
+    apiCall("/api/imagespending", {limit: 16, offset: 0}, function(res) {
+            showImages(res);
+    });
+}
+
+function doAccept(el) {
+    var imgId = parseInt(el.id);
+    apiCall("/api/reply", {id: imgId, response: 0}, function(res) {
+            bannerOk("Response recorded for " + imgId);
+    });
+}
+
+function doDecline(el) {
+    var imgId = parseInt(el.id);
+    apiCall("/api/reply", {id: imgId, response: 1}, function(res) {
+            bannerOk("Response recorded for " + imgId);
+    });
+}
+
 </script>
 </head>
 
@@ -143,6 +187,7 @@ function doMyImages() {
 
 <div id="dMenuReviewer" style="visibility:hidden">
 Review menu
+<button type="button" onclick="doPendingImages()">Pending validation</button>
 </div>
 
 

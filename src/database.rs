@@ -74,19 +74,31 @@ impl Database {
         }
         return res;
     }
-    pub async fn validationBatch(&mut self, page: Page) -> Vec<Entry> {
-        let rows = &self.conn.query("SELECT id, uploader, validated, submitted_at, key FROM images where response IS NULL ORDER by submitted_at LIMIT $1 OFFSET $2",
-            &[&page.limit, &page.offset]).await.unwrap();
+    pub async fn pendingValidation(&mut self, page: Page) -> Vec<Entry> {
+        let bilimit = page.limit as i64;
+        let bioffset = page.offset as i64;
         let mut res = Vec::new();
+        let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images WHERE response is NULL ORDER BY submitted_at LIMIT $1 OFFSET $2",
+            &[&bilimit, &bioffset]).await.unwrap();
         for row in rows {
+            let val : Option<i32> = row.get(1);
+            let id : i32 = row.get(0);
+            let user : i64 = row.get(4);
             res.push(Entry{
-                    id: row.get(0),
-                    uploader: row.get(1),
-                    validated: row.get(2),
-                    submitted_at: row.get(3),
-                    key: row.get(4)
+                    id: id as u32,
+                    uploader: user as u32,
+                    validated: val.unwrap_or(-1),
+                    submitted_at: row.get(2),
+                    key: row.get(3)
             });
         }
         return res;
+    }
+    pub async fn setResponse(&mut self, id: u32, response: u32) -> String {
+        let biid = id as i32;
+        let iresp = response as i32;
+        let rows = &self.conn.query("UPDATE images SET response=$1 WHERE id=$2 returning(key);",
+            &[&iresp, &biid]).await.unwrap();
+        return rows[0].get(0);
     }
 }
