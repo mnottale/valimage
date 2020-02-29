@@ -4,6 +4,13 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
+pub struct Configuration {
+    pub database: String,
+    pub secret: String,
+}
+
+
+#[derive(Deserialize, Serialize)]
 pub struct Login {
     pub login: String,
     pub password: String,

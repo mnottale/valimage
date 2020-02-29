@@ -1,0 +1,2 @@
+database: "postgres://valimage:valimage@localhost/valimage"
+secret: "" # leave empty to auto-generate
