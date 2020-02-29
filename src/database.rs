@@ -54,6 +54,30 @@ impl Database {
         }
         return res;
     }
+    pub async fn getOneIf(&mut self, id: u32, userId: u64) -> Option<Entry> {
+        let biid = id as i64;
+        let biuser = userId as i64;
+        let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images where id=$1 AND (uploader = $2 OR $2 = 0);",
+            &[&biid, &biuser]).await.unwrap();
+        if rows.len() == 0 {
+            return None;
+        }
+        let row = &rows[0];
+        let val : Option<i32> = row.get(1);
+        let id : i32 = row.get(0);
+        let uploader : i64 = row.get(4);
+        return Some(Entry {
+            id: id as u32,
+            uploader: uploader as u32,
+            validated: val.unwrap_or(-1),
+            submitted_at: row.get(2),
+            key: row.get(3)
+        });
+    }
+    pub async fn deleteOne(&mut self, id: u32) {
+        let biid = id as i64;
+        &self.conn.query("DELETE from images WHERE id=$1", &[&biid]).await.unwrap();
+    }
     pub async fn allByUser(&mut self, user: u32, page: Page) -> Vec<Entry> {
         let biuser = user as i64;
         let bilimit = page.limit as i64;

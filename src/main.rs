@@ -51,6 +51,17 @@ async fn api_authinfo(ai: AuthInfo) -> Result<impl warp::Reply, Infallible> {
     return Ok(warp::reply::json(&ai));
 }
 
+async fn api_logout() -> Result<impl warp::Reply, Infallible> {
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(warp::http::header::LOCATION, "/")
+        .header(
+            warp::http::header::SET_COOKIE,
+            "BEARER=; SameSite=Strict; HttpOpnly",
+            )
+        .body(b"true".to_vec()).unwrap())
+}
+
 async fn api_login(login: types::Login, authenticator: Arc<AuthenticatorDemo>, secret: String) -> Result<impl warp::Reply, Infallible> {
     let res = authenticator.authenticate(&login.login, &login.password);
     match res {
@@ -66,6 +77,25 @@ async fn api_login(login: types::Login, authenticator: Arc<AuthenticatorDemo>, s
     }
 }
 
+async fn api_delete(imageId:u32, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
+    if ai.userId == 0 {
+        return Ok(warp::reply::json(&false));
+    }
+    let mut uidMatch = 0;
+    if ai.role == "user" {
+        uidMatch = ai.userId;
+    }
+    if let Some(entry) = db.lock().await.getOneIf(imageId, uidMatch).await {
+        let stor = match entry.validated {
+            0 => &storages.storageValidated,
+            _ => &storages.storagePending,
+        };
+        stor.delete(entry.key);
+        db.lock().await.deleteOne(imageId);
+        return Ok(warp::reply::json(&true));
+    }
+    return Ok(warp::reply::json(&false));
+}
 async fn api_myimages(page: Page, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
     if ai.userId == 0 {
         let empty : Vec<i32> = Vec::new();
@@ -243,7 +273,8 @@ async fn main() {
         .and(with_authenticator(authenticator))
         .and(with_something("SUPERDUPERSECRET".to_string()))
         .and_then(api_login);
-    
+    let r_api_logout = warp::path!("api" / "logout")
+        .and_then(api_logout);
     let r_api_authinfo = warp::path!("api" / "authinfo")
         .and(with_auth(&"SUPERDUPERSECRET".to_string()))
         .and_then(api_authinfo);
@@ -253,6 +284,12 @@ async fn main() {
         .and(with_db(db.clone()))
         .and(with_storages(storages.clone()))
         .and_then(api_myimages);
+    let r_api_delete = warp::path!("api" / "imagedelete")
+        .and(warp::body::json())
+        .and(with_auth(&"SUPERDUPERSECRET".to_string()))
+        .and(with_db(db.clone()))
+        .and(with_storages(storages.clone()))
+        .and_then(api_delete);
     let r_api_images_to_validate = warp::path!("api" / "imagespending")
         .and(warp::body::json())
         .and(with_auth(&"SUPERDUPERSECRET".to_string()))
@@ -275,16 +312,19 @@ async fn main() {
         .and(warp::fs::dir("store/pending"));
     let r_imgs_live = warp::path("live")
         .and(warp::fs::dir("store/live"));
+    let r_static = warp::path("static").and(warp::fs::dir("static"));
     let r_index = warp::path("index.html").and(warp::fs::file("./index.html"));
     warp::serve(hello
           .or(r_api_byuser)
           .or(r_api_login)
+          .or(r_api_logout)
           .or(r_api_authinfo)
           .or(r_api_upload)
           .or(r_api_myimages)
           .or(r_api_images_to_validate)
           .or(r_api_reply)
           .or(r_index)
+          .or(r_static)
           .or(r_imgs_pending)
           .or(r_imgs_live))
         .run(([127, 0, 0, 1], 3030))

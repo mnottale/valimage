@@ -17,6 +17,7 @@ impl Storage for StorageLocal {
         fs::write(format!("{}/{}", self.pathBase, key), data);
     }
     fn delete(&self, key: String) {
+        fs::remove_file(format!("{}/{}", self.pathBase, key));
     }
     fn urlFor(&self, key: &String) -> String {
         return format!("{}/{}", self.urlBase, key);

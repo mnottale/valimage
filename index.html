@@ -1,5 +1,38 @@
 <html>
 <head>
+<style type="text/css">
+
+#dLogin {
+    text-align: center;
+}
+
+#dRole {
+    text-align: center;
+    font-size: 50%;
+}
+
+#dImages {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.bannerOk {
+    border: 1px green solid;
+    background-color: #ccffcc;
+}
+
+.bannerFail {
+    border: 1px red solid;
+    background-color: #ffcccc;
+}
+
+.sImage {
+    margin: 5px;
+}
+
+</style>
+
+
 <script language="javascript">
 
 // we keep those for credentials refresh
@@ -41,39 +74,43 @@ function handleGenericError(status) {
 
 function bannerHide() {
     var b = document.getElementById("dBanner");
-    b.style.visibility = 'hidden';
+    b.style.display = 'none';
 }
 
 function bannerOk(msg) {
     var b = document.getElementById("dBanner");
-    b.style.visibility = 'visible';
+    b.style.display = '';
     b.className = "bannerOk";
     b.innerText = msg;
 }
 
 function bannerFail(msg) {
     var b = document.getElementById("dBanner");
-    b.style.visibility = 'visible';
+    b.style.display = '';
     b.className = "bannerFail";
     b.innerText = msg;
 }
 
-function onLoad() {
-    
-}
 
 function showRole(username, role) {
-    document.getElementById("dRole").style.visibility = 'visible';
+    document.getElementById("dRole").style.display = '';
     document.getElementById("dRoleUsername").innerText = username;
     document.getElementById("dRoleRole").innerText = role;
 }
 function showReviewer() {
-    document.getElementById("dMenuReviewer").style.visibility = 'visible';
-    document.getElementById("dLogin").style.visibility = 'hidden';
+    document.getElementById("dMenuReviewer").style.display = '';
+    document.getElementById("dMenuUser").style.display = 'none';
+    document.getElementById("dLogin").style.display = 'none';
 }
 function showUser() {
-    document.getElementById("dMenuUser").style.visibility = 'visible';
-    document.getElementById("dLogin").style.visibility = 'hidden';
+    document.getElementById("dMenuUser").style.display = '';
+    document.getElementById("dMenuReviewer").style.display = 'none';
+    document.getElementById("dLogin").style.display = 'none';
+}
+function showLogin() {
+    document.getElementById("dLogin").style.display = '';
+    document.getElementById("dMenuReviewer").style.display = 'none';
+    document.getElementById("dMenuUser").style.display = 'none';
 }
 
 function showImages(imgs) {
@@ -85,7 +122,7 @@ function showImages(imgs) {
             color = "green";
         if (ima.validated > 0)
             color = "red";
-        content += '<span id="' + ima.id + '" onmouseout="doImageMenuHide(this)" onmouseover="doImageMenu(this)" style="border: 2px solid ' + color + ' ;">';
+        content += '<span class="sImage" id="' + ima.id + '" onmouseout="doImageMenuHide(this)" onmouseover="doImageMenu(this)" style="border: 2px solid ' + color + ' ;">';
         content += '<img height="200" src="' + ima.key + '">';
         content += '<div></div>';
         content += '</span>';
@@ -103,9 +140,15 @@ function fetchRole() {
             else if (ai.role == "user") {
                 showUser();
             }
+            else {
+                showLogin();
+            }
     });
 }
 
+function doInitialize() {
+    fetchRole();
+}
 
 function doImageMenu(span)
 {
@@ -147,6 +190,9 @@ function doLogin() {
         });
 }
 
+function doLogout() {
+    apiCall("/api/logout", {}, function(res) {showLogin();});
+}
 function doMyImages() {
     apiCall("/api/myimages", {limit: 100, offset: 0}, function(res) {
             showImages(res);
@@ -175,41 +221,39 @@ function doDecline(el) {
 </script>
 </head>
 
-<body>
-<div id="dBanner" style="visibility:hidden">
+<body onLoad="doInitialize()">
+<div id="dBanner" style="display:hidden">
 </div>
 
 
-<div id="dRole" style="visibility:hidden">
-  Logged as <span id="dRoleUsername"></span>  with role <span id="dRoleRole"></span>
-</div>
-
-
-<div id="dMenuReviewer" style="visibility:hidden">
+<div id="dMenuReviewer" style="display:hidden">
 Review menu
 <button type="button" onclick="doPendingImages()">Pending validation</button>
 </div>
 
 
-<div id="dMenuUser" style="visibility:hidden">
+<div id="dMenuUser" style="display:hidden">
 User menu
 <button type="button" onclick="doMyImages()">My images</button>
-</div>
-
-<div id="dUpload">
- Select file to upload: <br/>
+ Submit image for validation:
  <input type="file" id="iFile" name="file">
  <button type="button" onclick="doUpload()">UPLOAD</button>
 </div>
 
+
 <div id="dLogin">
-  Please login: <br/>
+<img src="static/welcome.jpg" width="300"><br/>
+  Please login to the image submission server: <br/>
   <input type="text" id="iLogin" placeholder="login"><br>
   <input type="password" id="iPassword" placeholder="password"><br/>
   <button type="button" onclick="doLogin()">GO </button>
 </div>
 
-<div id="dImages" style="display:flex;">
+<div id="dImages">
+</div>
+<div id="dRole" style="display:hidden">
+  Logged as <span id="dRoleUsername"></span>  with role <span id="dRoleRole"></span>
+  <button type="button" onclick="doLogout()">logout</button>
 </div>
 </body>
 </html>
