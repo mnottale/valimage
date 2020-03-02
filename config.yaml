@@ -1,2 +1,7 @@
 database: "postgres://valimage:valimage@localhost/valimage"
 secret: "" # leave empty to auto-generate
+s3_bucket_live: ""  #leave empty for local filesystem
+s3_bucket_pending: "" #leave empty for local filesystem
+s3_region: ""
+s3_access_key: ""
+s3_secret_key: ""

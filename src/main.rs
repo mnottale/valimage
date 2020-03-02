@@ -38,8 +38,8 @@ use types::{Configuration, Page, ValidationResult};
 pub type DB = Arc<Mutex<database::Database>>;
 
 struct Storages {
-    storageValidated: storage::StorageLocal,
-    storagePending: storage::StorageLocal,
+    storageValidated: Box<dyn storage::Storage>,
+    storagePending: Box<dyn storage::Storage>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -109,7 +109,7 @@ async fn api_myimages(page: Page, ai: AuthInfo, db: DB, storages: Arc<Storages>)
             0 => &storages.storageValidated,
             _ => &storages.storagePending,
         };
-        entry.key = stor.urlFor(&entry.key);
+        entry.key = stor.urlFor(&entry.key).await;
     }
     return Ok(warp::reply::json(&res));
 }
@@ -125,7 +125,7 @@ async fn api_images_to_validate(page: Page, ai: AuthInfo, db: DB, storages: Arc<
             0 => &storages.storageValidated,
             _ => &storages.storagePending,
         };
-        entry.key = stor.urlFor(&entry.key);
+        entry.key = stor.urlFor(&entry.key).await;
     }
     return Ok(warp::reply::json(&res));
 }
@@ -149,7 +149,7 @@ async fn api_by_user(usr: u32, validated: bool, db: DB, storages: Arc<Storages>)
      false => &storages.storagePending,
  };
  for entry in &mut res {
-     entry.url = stor.urlFor(&entry.url);
+     entry.url = stor.urlFor(&entry.url).await;
  }
  return Ok(warp::reply::json(&res));
 }
@@ -250,13 +250,20 @@ async fn main() {
     let config : Configuration = serde_yaml::from_str(&configContent).unwrap();
     let mut db_inner = database::Database::new(&config.database).await;
     let mut db = Arc::new(Mutex::new(db_inner));
-    let storagePending = storage::StorageLocal{
-        pathBase: "store/pending".to_string(),
-        urlBase: "/pending".to_string()
+    let storagePending : Box<dyn storage::Storage> = match config.s3_bucket_pending.len() {
+        0 => Box::new(storage::StorageLocal{
+            pathBase: "store/pending".to_string(),
+            urlBase: "/pending".to_string()
+        }),
+        _ => Box::new(storage::StorageS3::new(&config, false))
     };
-    let storageValidated = storage::StorageLocal{
-        pathBase: "store/live".to_string(),
-        urlBase: "/live".to_string()
+    let storageValidated : Box<dyn storage::Storage> = match config.s3_bucket_live.len() {
+        0 => Box::new(
+            storage::StorageLocal{
+                pathBase: "store/live".to_string(),
+                urlBase: "/live".to_string()
+            }),
+        _ => Box::new(storage::StorageS3::new(&config, true))
     };
     let storages = Arc::new(Storages {
         storagePending: storagePending,

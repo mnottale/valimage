@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 pub struct Configuration {
     pub database: String,
     pub secret: String,
+    pub s3_bucket_live: String,
+    pub s3_bucket_pending: String,
+    pub s3_region: String,
+    pub s3_access_key: String,
+    pub s3_secret_key: String,
 }
 
 
