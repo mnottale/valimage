@@ -248,6 +248,10 @@ fn with_login_credentials() -> impl Filter<Extract = (types::Login,), Error = wa
 async fn main() {
     let configContent = fs::read_to_string("config.yaml").unwrap();
     let config : Configuration = serde_yaml::from_str(&configContent).unwrap();
+    let secret = match config.secret.len() {
+        0 => make_key(),
+        _ => config.secret.clone()
+    };
     let mut db_inner = database::Database::new(&config.database).await;
     let mut db = Arc::new(Mutex::new(db_inner));
     let storagePending : Box<dyn storage::Storage> = match config.s3_bucket_pending.len() {
@@ -281,40 +285,40 @@ async fn main() {
     let r_api_login = warp::path!("api" / "login")
         .and(with_login_credentials())
         .and(with_authenticator(authenticator))
-        .and(with_something(config.secret.clone()))
+        .and(with_something(secret.clone()))
         .and_then(api_login);
     let r_api_logout = warp::path!("api" / "logout")
         .and_then(api_logout);
     let r_api_authinfo = warp::path!("api" / "authinfo")
-        .and(with_auth(&config.secret))
+        .and(with_auth(&secret))
         .and_then(api_authinfo);
     let r_api_myimages = warp::path!("api" / "myimages")
         .and(warp::body::json())
-        .and(with_auth(&config.secret))
+        .and(with_auth(&secret))
         .and(with_db(db.clone()))
         .and(with_storages(storages.clone()))
         .and_then(api_myimages);
     let r_api_delete = warp::path!("api" / "imagedelete")
         .and(warp::body::json())
-        .and(with_auth(&config.secret))
+        .and(with_auth(&secret))
         .and(with_db(db.clone()))
         .and(with_storages(storages.clone()))
         .and_then(api_delete);
     let r_api_images_to_validate = warp::path!("api" / "imagespending")
         .and(warp::body::json())
-        .and(with_auth(&config.secret))
+        .and(with_auth(&secret))
         .and(with_db(db.clone()))
         .and(with_storages(storages.clone()))
         .and_then(api_images_to_validate);
     let r_api_reply = warp::path!("api" / "reply")
         .and(warp::body::json())
-        .and(with_auth(&config.secret))
+        .and(with_auth(&secret))
         .and(with_db(db.clone()))
         .and(with_storages(storages.clone()))
         .and_then(api_reply);
     let r_api_upload = warp::path!("api" / "upload")
         .and(warp::body::bytes())
-        .and(with_auth(&config.secret))
+        .and(with_auth(&secret))
         .and(with_db(db.clone()))
         .and(with_storages(storages.clone()))
         .and_then(api_upload);
