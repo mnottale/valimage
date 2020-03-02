@@ -41,7 +41,7 @@ password="";
 role="guest";
 
 imageMenu = {
-    "user": '<button type="button" onclick="doDelete(this)">Delete</button>',
+    "user": '<button type="button" id=@ID onclick="doDelete(this)">Delete</button>',
     "reviewer": '<button type="button" id=@ID onclick="doAccept(this)">Accept</button><button type="button" id=@ID onclick="doDecline(this)">Decline</button>'
 }
 
@@ -81,14 +81,14 @@ function bannerOk(msg) {
     var b = document.getElementById("dBanner");
     b.style.display = '';
     b.className = "bannerOk";
-    b.innerText = msg;
+    b.children[0].innerText = msg;
 }
 
 function bannerFail(msg) {
     var b = document.getElementById("dBanner");
     b.style.display = '';
     b.className = "bannerFail";
-    b.innerText = msg;
+    b.children[0].innerText = msg;
 }
 
 
@@ -111,6 +111,7 @@ function showLogin() {
     document.getElementById("dLogin").style.display = '';
     document.getElementById("dMenuReviewer").style.display = 'none';
     document.getElementById("dMenuUser").style.display = 'none';
+    document.getElementById("dImages").innerHTML = "";
 }
 
 function showImages(imgs) {
@@ -207,14 +208,42 @@ function doPendingImages() {
 function doAccept(el) {
     var imgId = parseInt(el.id);
     apiCall("/api/reply", {id: imgId, response: 0}, function(res) {
-            bannerOk("Response recorded for " + imgId);
+            if (res)
+            {
+                bannerOk("Response recorded for " + imgId);
+                var e = document.getElementById(imgId);
+                e.parentNode.removeChild(e);
+            }
+            else
+                bannerFail("Failed to set image status");
     });
 }
 
 function doDecline(el) {
     var imgId = parseInt(el.id);
     apiCall("/api/reply", {id: imgId, response: 1}, function(res) {
-            bannerOk("Response recorded for " + imgId);
+            if (res)
+            {
+                bannerOk("Response recorded for " + imgId);
+                var e = document.getElementById(imgId);
+                e.parentNode.removeChild(e);
+            }
+            else
+                bannerFail("Failed to set image status");
+    });
+}
+
+function doDelete(el) {
+    var imgId = parseInt(el.id);
+    apiCall("/api/imagedelete", imgId, function(res) {
+            if (res)
+            {
+                bannerOk("Image deleted successfuly");
+                var e = document.getElementById(imgId);
+                e.parentNode.removeChild(e);
+            }
+            else
+                bannerFail("Failed to delete image");
     });
 }
 
@@ -223,6 +252,8 @@ function doDecline(el) {
 
 <body onLoad="doInitialize()">
 <div id="dBanner" style="display:hidden">
+<span id="dBannerMessage"></span>
+<button type="button" onclick="bannerHide()">X</button>
 </div>
 
 

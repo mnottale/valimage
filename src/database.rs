@@ -12,7 +12,8 @@ CREATE TABLE images(
    validated_by BIGINT,
    submitted_at TIMESTAMP NOT NULL,
    validated_at TIMESTAMP,
-   key VARCHAR(1024)
+   key VARCHAR(1024),
+   deleted_at TIMESTAMP,
 );
 */
 pub struct Database {
@@ -44,7 +45,7 @@ impl Database {
         let biuser = user as i64;
         let bilimit = page.limit as i64;
         let bioffset = page.offset as i64;
-        let rows = &self.conn.query("SELECT id, key FROM images WHERE uploader = $1 AND (response IS NOT NULL) = $2 ORDER BY submitted_at LIMIT $3 OFFSET $4",
+        let rows = &self.conn.query("SELECT id, key FROM images WHERE uploader = $1 AND (response IS NOT NULL) = $2 AND deleted_at is NULL ORDER BY submitted_at LIMIT $3 OFFSET $4",
             &[&biuser, &validated, &bilimit, &bioffset]).await.unwrap();
         println!("Bouining records...");
         let mut res = Vec::new();
@@ -55,9 +56,9 @@ impl Database {
         return res;
     }
     pub async fn getOneIf(&mut self, id: u32, userId: u64) -> Option<Entry> {
-        let biid = id as i64;
+        let biid = id as i32;
         let biuser = userId as i64;
-        let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images where id=$1 AND (uploader = $2 OR $2 = 0);",
+        let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images where id=$1 AND deleted_at IS NULL AND (uploader = $2 OR $2 = 0);",
             &[&biid, &biuser]).await.unwrap();
         if rows.len() == 0 {
             return None;
@@ -75,15 +76,15 @@ impl Database {
         });
     }
     pub async fn deleteOne(&mut self, id: u32) {
-        let biid = id as i64;
-        &self.conn.query("DELETE from images WHERE id=$1", &[&biid]).await.unwrap();
+        let biid = id as i32;
+        &self.conn.query("UPDATE images SET deleted_at=NOW() WHERE id=$1;", &[&biid]).await.unwrap();
     }
     pub async fn allByUser(&mut self, user: u32, page: Page) -> Vec<Entry> {
         let biuser = user as i64;
         let bilimit = page.limit as i64;
         let bioffset = page.offset as i64;
         let mut res = Vec::new();
-        let rows = &self.conn.query("SELECT id, response, submitted_at, key FROM images WHERE uploader = $1 ORDER BY submitted_at LIMIT $2 OFFSET $3",
+        let rows = &self.conn.query("SELECT id, response, submitted_at, key FROM images WHERE uploader = $1 AND deleted_at IS NULL ORDER BY submitted_at LIMIT $2 OFFSET $3",
             &[&biuser, &bilimit, &bioffset]).await.unwrap();
         for row in rows {
             let val : Option<i32> = row.get(1);
@@ -102,7 +103,7 @@ impl Database {
         let bilimit = page.limit as i64;
         let bioffset = page.offset as i64;
         let mut res = Vec::new();
-        let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images WHERE response is NULL ORDER BY submitted_at LIMIT $1 OFFSET $2",
+        let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images WHERE response is NULL AND deleted_at IS NULL ORDER BY submitted_at LIMIT $1 OFFSET $2",
             &[&bilimit, &bioffset]).await.unwrap();
         for row in rows {
             let val : Option<i32> = row.get(1);

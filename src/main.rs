@@ -9,6 +9,8 @@ Wish-list:
   * async S3
   * signed S3 queries for pending bucket
   * image format and size limit validation
+  * pagination/filtering in "my images"
+  * automatic DB creation and provisioned migration for future schema changes
 */
 
 extern crate warp;
@@ -100,13 +102,14 @@ async fn api_delete(imageId:u32, ai: AuthInfo, db: DB, storages: Arc<Storages>) 
     if ai.role == "user" {
         uidMatch = ai.userId;
     }
-    if let Some(entry) = db.lock().await.getOneIf(imageId, uidMatch).await {
+    let mut dbl = db.lock().await;
+    if let Some(entry) = dbl.getOneIf(imageId, uidMatch).await {
         let stor = match entry.validated {
             0 => &storages.storageValidated,
             _ => &storages.storagePending,
         };
         stor.delete(&entry.key);
-        db.lock().await.deleteOne(imageId).await;
+        dbl.deleteOne(imageId).await;
         return Ok(warp::reply::json(&true));
     }
     return Ok(warp::reply::json(&false));
@@ -351,6 +354,7 @@ async fn main() {
           .or(r_api_myimages)
           .or(r_api_images_to_validate)
           .or(r_api_reply)
+          .or(r_api_delete)
           .or(r_index)
           .or(r_static)
           .or(r_imgs_pending)
