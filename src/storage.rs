@@ -5,9 +5,9 @@ use super::types::Configuration;
 #[async_trait]
 pub trait Storage: Sync + Send {
     fn configure(&mut self, config: &Configuration, isLive: bool) {}
-    async fn get(&self, key: String) -> Vec<u8>;
-    async fn store(&self, key: String, data: &[u8]);
-    async fn delete(&self, key: String);
+    async fn get(&self, key: &String) -> Vec<u8>;
+    async fn store(&self, key: &String, data: &[u8]);
+    async fn delete(&self, key: &String);
     async fn urlFor(&self, key: &String) -> String;
 }
 
@@ -19,13 +19,13 @@ pub struct StorageLocal {
 
 #[async_trait]
 impl Storage for StorageLocal {
-    async fn get(&self, key: String) -> Vec<u8> {
+    async fn get(&self, key: &String) -> Vec<u8> {
         return fs::read(format!("{}/{}", self.pathBase, key)).unwrap();
     }
-    async fn store(&self, key: String, data: &[u8]) {
+    async fn store(&self, key: &String, data: &[u8]) {
         fs::write(format!("{}/{}", self.pathBase, key), data);
     }
-    async fn delete(&self, key: String) {
+    async fn delete(&self, key: &String) {
         fs::remove_file(format!("{}/{}", self.pathBase, key));
     }
     async fn urlFor(&self, key: &String) -> String {
@@ -65,13 +65,13 @@ impl Storage for StorageS3 {
         self.isLive = isLive;
     }
     // FIXME sync functions, sync functions everywhere!!!
-    async fn get(&self, key: String) -> Vec<u8> {
+    async fn get(&self, key: &String) -> Vec<u8> {
         return self.bucket.as_ref().unwrap().get_object(&format!("/{}", key)).unwrap().0;
     }
-    async fn store(&self, key: String, data: &[u8]) {
+    async fn store(&self, key: &String, data: &[u8]) {
         self.bucket.as_ref().unwrap().put_object(&format!("/{}", key), data, "image/unknown").unwrap();
     }
-    async fn delete(&self, key: String) {
+    async fn delete(&self, key: &String) {
         self.bucket.as_ref().unwrap().delete_object(&format!("/{}", key)).unwrap();
     }
     async fn urlFor(&self, key: &String) -> String {

@@ -1,3 +1,16 @@
+/*
+Wish-list:
+  * user quota
+  * sample REST-delegating auth module
+  * DB-auth
+  * all image operations delegated to asynchronous workers
+  * vanity URLs
+  * encoded user id in url
+  * async S3
+  * signed S3 queries for pending bucket
+  * image format and size limit validation
+*/
+
 extern crate warp;
 extern crate headers;
 extern crate sha2;
@@ -92,8 +105,8 @@ async fn api_delete(imageId:u32, ai: AuthInfo, db: DB, storages: Arc<Storages>) 
             0 => &storages.storageValidated,
             _ => &storages.storagePending,
         };
-        stor.delete(entry.key);
-        db.lock().await.deleteOne(imageId);
+        stor.delete(&entry.key);
+        db.lock().await.deleteOne(imageId).await;
         return Ok(warp::reply::json(&true));
     }
     return Ok(warp::reply::json(&false));
@@ -136,8 +149,9 @@ async fn api_reply(vr: ValidationResult, ai: AuthInfo, db: DB, storages: Arc<Sto
     }
     let key = db.lock().await.setResponse(vr.id, vr.response).await;
     if vr.response == 0 {
-        // TODO proper move api storage dependent
-        std::fs::rename(format!("store/pending/{}", &key), format!("store/live/{}", &key));
+        // Validated, we must move the image from one storage to the other
+        storages.storageValidated.store(&key, &storages.storagePending.get(&key).await).await;
+        storages.storagePending.delete(&key).await;
     }
     return Ok(warp::reply::json(&true));
 }
@@ -168,7 +182,7 @@ async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, db: DB, stora
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"".to_vec()).unwrap());
     }
     let key = make_key();
-    storages.storagePending.store(key.clone(), &bytes);
+    storages.storagePending.store(&key, &bytes).await;
     db.lock().await.upload(ai.userId, &key).await;
     return Ok(Response::builder().status(StatusCode::OK).body(b"".to_vec()).unwrap());
 }
