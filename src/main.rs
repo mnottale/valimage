@@ -57,6 +57,13 @@ struct Storages {
     storagePending: Box<dyn storage::Storage>,
 }
 
+struct Context {
+    storages: Storages,
+    db: DB,
+}
+
+pub type ContextRef = Arc<Context>;
+
 #[derive(Deserialize, Serialize)]
 struct AuthInfo {
     userId: u64,
@@ -94,7 +101,7 @@ async fn api_login(login: types::Login, authenticator: Arc<AuthenticatorDemo>, s
     }
 }
 
-async fn api_delete(imageId:u32, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
+async fn api_delete(imageId:u32, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
     if ai.userId == 0 {
         return Ok(warp::reply::json(&false));
     }
@@ -102,11 +109,11 @@ async fn api_delete(imageId:u32, ai: AuthInfo, db: DB, storages: Arc<Storages>) 
     if ai.role == "user" {
         uidMatch = ai.userId;
     }
-    let mut dbl = db.lock().await;
+    let mut dbl = ctx.db.lock().await;
     if let Some(entry) = dbl.getOneIf(imageId, uidMatch).await {
         let stor = match entry.validated {
-            0 => &storages.storageValidated,
-            _ => &storages.storagePending,
+            0 => &ctx.storages.storageValidated,
+            _ => &ctx.storages.storagePending,
         };
         stor.delete(&entry.key);
         dbl.deleteOne(imageId).await;
@@ -114,56 +121,56 @@ async fn api_delete(imageId:u32, ai: AuthInfo, db: DB, storages: Arc<Storages>) 
     }
     return Ok(warp::reply::json(&false));
 }
-async fn api_myimages(page: Page, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
+async fn api_myimages(page: Page, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
     if ai.userId == 0 {
         let empty : Vec<i32> = Vec::new();
         return Ok(warp::reply::json(&empty));
     }
-    let mut res = db.lock().await.allByUser(ai.userId as u32, page).await;
+    let mut res = ctx.db.lock().await.allByUser(ai.userId as u32, page).await;
     for entry in &mut res {
         let stor = match entry.validated {
-            0 => &storages.storageValidated,
-            _ => &storages.storagePending,
+            0 => &ctx.storages.storageValidated,
+            _ => &ctx.storages.storagePending,
         };
         entry.key = stor.urlFor(&entry.key).await;
     }
     return Ok(warp::reply::json(&res));
 }
 
-async fn api_images_to_validate(page: Page, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
+async fn api_images_to_validate(page: Page, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
     if ai.role != "reviewer" {
         let empty : Vec<i32> = Vec::new();
         return Ok(warp::reply::json(&empty));
     }
-    let mut res = db.lock().await.pendingValidation(page).await;
+    let mut res = ctx.db.lock().await.pendingValidation(page).await;
     for entry in &mut res {
         let stor = match entry.validated {
-            0 => &storages.storageValidated,
-            _ => &storages.storagePending,
+            0 => &ctx.storages.storageValidated,
+            _ => &ctx.storages.storagePending,
         };
         entry.key = stor.urlFor(&entry.key).await;
     }
     return Ok(warp::reply::json(&res));
 }
 
-async fn api_reply(vr: ValidationResult, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
+async fn api_reply(vr: ValidationResult, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
     if ai.role != "reviewer" {
         return Ok(warp::reply::json(&false));
     }
-    let key = db.lock().await.setResponse(vr.id, vr.response).await;
+    let key = ctx.db.lock().await.setResponse(vr.id, vr.response).await;
     if vr.response == 0 {
         // Validated, we must move the image from one storage to the other
-        storages.storageValidated.store(&key, &storages.storagePending.get(&key).await).await;
-        storages.storagePending.delete(&key).await;
+        ctx.storages.storageValidated.store(&key, &ctx.storages.storagePending.get(&key).await).await;
+        ctx.storages.storagePending.delete(&key).await;
     }
     return Ok(warp::reply::json(&true));
 }
 
-async fn api_by_user(usr: u32, validated: bool, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
- let mut res = db.lock().await.byUser(usr, validated, Page{limit: 100, offset: 0}).await;
+async fn api_by_user(usr: u32, validated: bool, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
+ let mut res = ctx.db.lock().await.byUser(usr, validated, Page{limit: 100, offset: 0}).await;
  let stor = match validated {
-     true => &storages.storageValidated,
-     false => &storages.storagePending,
+     true => &ctx.storages.storageValidated,
+     false => &ctx.storages.storagePending,
  };
  for entry in &mut res {
      entry.url = stor.urlFor(&entry.url).await;
@@ -180,22 +187,18 @@ fn make_key() -> String {
     }
     return res;
 }
-async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, db: DB, storages: Arc<Storages>) -> Result<impl warp::Reply, Infallible> {
+async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
     if (ai.role != "user") {
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"".to_vec()).unwrap());
     }
     let key = make_key();
-    storages.storagePending.store(&key, &bytes).await;
-    db.lock().await.upload(ai.userId, &key).await;
+    ctx.storages.storagePending.store(&key, &bytes).await;
+    ctx.db.lock().await.upload(ai.userId, &key).await;
     return Ok(Response::builder().status(StatusCode::OK).body(b"".to_vec()).unwrap());
 }
 
-fn with_db(db: DB) -> impl Filter<Extract = (DB,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || db.clone())
-}
-
-fn with_storages(s: Arc<Storages>) -> impl Filter<Extract = (Arc<Storages>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || s.clone())
+fn with_context(ctx: ContextRef) ->  impl Filter<Extract = (ContextRef,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || ctx.clone())
 }
 
 fn with_authenticator(s: Arc<AuthenticatorDemo>) -> impl Filter<Extract = (Arc<AuthenticatorDemo>,), Error = std::convert::Infallible> + Clone {
@@ -286,17 +289,20 @@ async fn main() {
             }),
         _ => Box::new(storage::StorageS3::new(&config, true))
     };
-    let storages = Arc::new(Storages {
+    let storages = Storages {
         storagePending: storagePending,
         storageValidated: storageValidated,
+    };
+    let context = Arc::new(Context {
+            db: db,
+            storages: storages,
     });
     let authenticator = Arc::new(AuthenticatorDemo{});
     let hello = warp::path!("hello" / String)
         .map(|name| format!("Hello, {}!", name));
 
     let r_api_byuser = warp::path!("api" / "byuser" / u32 / bool)
-      .and(with_db(db.clone()))
-      .and(with_storages(storages.clone()))
+      .and(with_context(context.clone()))
       .and_then(api_by_user);
 
     let r_api_login = warp::path!("api" / "login")
@@ -312,32 +318,27 @@ async fn main() {
     let r_api_myimages = warp::path!("api" / "myimages")
         .and(warp::body::json())
         .and(with_auth(&secret))
-        .and(with_db(db.clone()))
-        .and(with_storages(storages.clone()))
+        .and(with_context(context.clone()))
         .and_then(api_myimages);
     let r_api_delete = warp::path!("api" / "imagedelete")
         .and(warp::body::json())
         .and(with_auth(&secret))
-        .and(with_db(db.clone()))
-        .and(with_storages(storages.clone()))
+        .and(with_context(context.clone()))
         .and_then(api_delete);
     let r_api_images_to_validate = warp::path!("api" / "imagespending")
         .and(warp::body::json())
         .and(with_auth(&secret))
-        .and(with_db(db.clone()))
-        .and(with_storages(storages.clone()))
+        .and(with_context(context.clone()))
         .and_then(api_images_to_validate);
     let r_api_reply = warp::path!("api" / "reply")
         .and(warp::body::json())
         .and(with_auth(&secret))
-        .and(with_db(db.clone()))
-        .and(with_storages(storages.clone()))
+        .and(with_context(context.clone()))
         .and_then(api_reply);
     let r_api_upload = warp::path!("api" / "upload")
         .and(warp::body::bytes())
         .and(with_auth(&secret))
-        .and(with_db(db.clone()))
-        .and(with_storages(storages.clone()))
+        .and(with_context(context.clone()))
         .and_then(api_upload);
     let r_imgs_pending = warp::path("pending")
         .and(warp::fs::dir("store/pending"));
@@ -359,6 +360,6 @@ async fn main() {
           .or(r_static)
           .or(r_imgs_pending)
           .or(r_imgs_live))
-        .run(([127, 0, 0, 1], 3030))
+        .run(([0, 0, 0, 0], 3030))
         .await;
 }
