@@ -1,6 +1,5 @@
 /*
 Wish-list:
-  * user quota
   * sample REST-delegating auth module
   * DB-auth
   * all image operations delegated to asynchronous workers
@@ -11,6 +10,7 @@ Wish-list:
   * image format and size limit validation
   * pagination/filtering in "my images"
   * automatic DB creation and provisioned migration for future schema changes
+  * allow viewing full-sized image
 */
 
 extern crate warp;
@@ -60,6 +60,8 @@ struct Storages {
 struct Context {
     storages: Storages,
     db: DB,
+    quota_count: u64,
+    quota_size: u64,
 }
 
 pub type ContextRef = Arc<Context>;
@@ -191,9 +193,16 @@ async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextR
     if (ai.role != "user") {
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"".to_vec()).unwrap());
     }
+    let len = bytes.len() as u64;
+    let mut dbl = ctx.db.lock().await;
+    // quota check
+    let (cur_count, cur_sz) = dbl.quota(ai.userId).await;
+    if (ctx.quota_count != 0 && ctx.quota_count <= cur_count) || (ctx.quota_size != 0 && ctx.quota_size < cur_sz + len) {
+        return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"".to_vec()).unwrap());
+    }
     let key = make_key();
     ctx.storages.storagePending.store(&key, &bytes).await;
-    ctx.db.lock().await.upload(ai.userId, &key).await;
+    dbl.upload(ai.userId, &key, len).await;
     return Ok(Response::builder().status(StatusCode::OK).body(b"".to_vec()).unwrap());
 }
 
@@ -296,6 +305,8 @@ async fn main() {
     let context = Arc::new(Context {
             db: db,
             storages: storages,
+            quota_count: config.quota_count,
+            quota_size: config.quota_size,
     });
     let authenticator = Arc::new(AuthenticatorDemo{});
     let hello = warp::path!("hello" / String)

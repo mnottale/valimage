@@ -14,6 +14,7 @@ CREATE TABLE images(
    validated_at TIMESTAMP,
    key VARCHAR(1024),
    deleted_at TIMESTAMP,
+   size BIGINT NOT NULL,
 );
 */
 pub struct Database {
@@ -33,12 +34,21 @@ impl Database {
         };
     }
     // postgresql://user[:password]@host[:port][/database][?param1=val1[[&param2=val2]...]]
-    pub async fn upload(&mut self, user: u64, key: &String) -> u64 {
+    pub async fn upload(&mut self, user: u64, key: &String, size: u64) -> u64 {
         let biuser = user as i64;
-        let rows = &self.conn.query("INSERT into images(uploader, key, submitted_at) VALUES($1, $2, NOW()) returning (id);",
-            &[&biuser, key]).await.unwrap();
+        let bisize = size as i64;
+        let rows = &self.conn.query("INSERT into images(uploader, key, submitted_at, size) VALUES($1, $2, NOW(), $3) returning (id);",
+            &[&biuser, key, &bisize]).await.unwrap();
         let id: i32 = rows[0].get(0);
         return id as u64;
+    }
+    pub async fn quota(&mut self, user: u64) -> (u64, u64) {
+        let biuser = user as i64;
+        let rows = &self.conn.query("SELECT count(1), CAST(sum(size) AS bigint) FROM images WHERE deleted_at IS NULL and uploader = $1;",
+            &[&biuser]).await.unwrap();
+       let count: i64 = rows[0].get(0);
+       let sz: i64 = rows[0].get(1);
+       return (count as u64, sz as u64);
     }
     pub async fn byUser(&mut self, user: u32, validated: bool, page: Page) -> Vec<Image> {
         println!("Entering query");
