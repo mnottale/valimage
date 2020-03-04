@@ -9,6 +9,8 @@ pub struct Configuration {
     pub secret: String,
     pub quota_count: u64,
     pub quota_size: u64,
+    pub max_size: u64,
+    pub accepted_types: Vec<String>,
     pub s3_bucket_live: String,
     pub s3_bucket_pending: String,
     pub s3_region: String,

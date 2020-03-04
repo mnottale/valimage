@@ -25,6 +25,7 @@ rand = "0.7.3"
 bytes = "*"
 rust-s3 = "*"
 async-trait = "0.1.24"
+tree_magic = "*"
 
 [dev-dependencies]
 serde_derive = "1.0"

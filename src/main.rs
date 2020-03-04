@@ -7,7 +7,6 @@ Wish-list:
   * encoded user id in url
   * async S3
   * signed S3 queries for pending bucket
-  * image format and size limit validation
   * pagination/filtering in "my images"
   * automatic DB creation and provisioned migration for future schema changes
   * allow viewing full-sized image
@@ -21,6 +20,7 @@ extern crate serde;
 extern crate rand;
 extern crate bytes;
 extern crate serde_yaml;
+extern crate tree_magic;
 
 use std::time::SystemTime;
 use std::fs;
@@ -62,6 +62,8 @@ struct Context {
     db: DB,
     quota_count: u64,
     quota_size: u64,
+    max_size: u64,
+    accepted_types: Vec<String>,
 }
 
 pub type ContextRef = Arc<Context>;
@@ -194,11 +196,18 @@ async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextR
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"".to_vec()).unwrap());
     }
     let len = bytes.len() as u64;
+    if ctx.max_size != 0 && len > ctx.max_size {
+         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"file too big".to_vec()).unwrap());
+    }
     let mut dbl = ctx.db.lock().await;
     // quota check
     let (cur_count, cur_sz) = dbl.quota(ai.userId).await;
     if (ctx.quota_count != 0 && ctx.quota_count <= cur_count) || (ctx.quota_size != 0 && ctx.quota_size < cur_sz + len) {
-        return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"".to_vec()).unwrap());
+        return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"over quota".to_vec()).unwrap());
+    }
+    let mime = tree_magic::from_u8(&bytes);
+    if ctx.accepted_types.len() != 0 && !ctx.accepted_types.contains(&mime) {
+        return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"file type not accepted".to_vec()).unwrap());
     }
     let key = make_key();
     ctx.storages.storagePending.store(&key, &bytes).await;
@@ -307,6 +316,8 @@ async fn main() {
             storages: storages,
             quota_count: config.quota_count,
             quota_size: config.quota_size,
+            max_size: config.max_size,
+            accepted_types: config.accepted_types.clone(),
     });
     let authenticator = Arc::new(AuthenticatorDemo{});
     let hello = warp::path!("hello" / String)

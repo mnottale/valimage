@@ -2,6 +2,8 @@ database: "postgres://valimage:valimage@localhost/valimage"
 secret: "" # leave empty to auto-generate
 quota_count: 0 # max images per user, 0 for infinite
 quota_size: 0 # max total size per user, 0 for infinite
+max_size: 0 # max single image size, 0 for infinite
+accepted_types: ["image/gif", "image/jpeg", "image/png"] # list of accepted mime types. Empty list to accept everything 
 s3_bucket_live: ""  #leave empty for local filesystem
 s3_bucket_pending: "" #leave empty for local filesystem
 s3_region: ""
