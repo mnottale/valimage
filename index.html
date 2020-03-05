@@ -30,6 +30,23 @@
     margin: 5px;
 }
 
+#dFullscreen {
+    position: fixed;
+    left: 0px;
+    top: 0px;
+    width: 100%;
+    height: 100%;
+    background: #555555F0;
+    text-align: center;
+    overflow: scroll;
+}
+
+#iFullscreen {
+    text-align: center;
+}
+#iFullscreen .img {
+}
+
 </style>
 
 
@@ -124,7 +141,7 @@ function showImages(imgs) {
         if (ima.validated > 0)
             color = "red";
         content += '<span class="sImage" id="' + ima.id + '" onmouseout="doImageMenuHide(this)" onmouseover="doImageMenu(this)" style="border: 2px solid ' + color + ' ;">';
-        content += '<img height="200" src="' + ima.key + '">';
+        content += '<img onclick="doShowFullscreen(this)" id="' + ima.key + '" height="200" src="' + ima.key + '">';
         content += '<div></div>';
         content += '</span>';
     }
@@ -247,6 +264,15 @@ function doDelete(el) {
     });
 }
 
+function doShowFullscreen(img) {
+    document.getElementById("dFullscreen").style.display = '';
+    document.getElementById('iFullscreen').src = img.id;
+}
+
+function doHideFullscreen() {
+    document.getElementById("dFullscreen").style.display = 'none';
+}
+
 </script>
 </head>
 
@@ -278,13 +304,18 @@ User menu
   <input type="text" id="iLogin" placeholder="login"><br>
   <input type="password" id="iPassword" placeholder="password"><br/>
   <button type="button" onclick="doLogin()">GO </button>
+  <br/>
+  Demo mode: login starts with r for reviewer, u for user . Password is your user id (use below 1000 for reviewers only please).
 </div>
 
 <div id="dImages">
 </div>
-<div id="dRole" style="display:hidden">
+<div id="dRole" style="display:none">
   Logged as <span id="dRoleUsername"></span>  with role <span id="dRoleRole"></span>
   <button type="button" onclick="doLogout()">logout</button>
+</div>
+<div id="dFullscreen" style="display:none" onclick="doHideFullscreen()">
+   <img id="iFullscreen" onclick="doHideFullscreen()">
 </div>
 </body>
 </html>
