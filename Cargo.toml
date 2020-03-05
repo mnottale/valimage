@@ -13,7 +13,7 @@ name = "valimage"
 
 [dependencies]
 
-tokio = { version = "0.2", features = ["macros"] }
+tokio = { version = "0.2", features = ["macros", "io-util"] }
 warp = "0.2"
 tokio-postgres = "0.5.2"
 serde = { version = "1.0", features = ["derive"] }
@@ -23,9 +23,12 @@ sha2 = "*"
 hex = "*"
 rand = "0.7.3"
 bytes = "*"
-rust-s3 = "*"
+rusoto_core = "0.43.0-beta.1"
+rusoto_s3 = "0.43.0-beta.1"
+rusoto_credential = "0.43.0-beta.1"
 async-trait = "0.1.24"
 tree_magic = "*"
+futures = "*"
 
 [dev-dependencies]
 serde_derive = "1.0"

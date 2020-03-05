@@ -33,18 +33,28 @@ impl Storage for StorageLocal {
     }
 }
 
-extern crate s3;
-use s3::credentials::Credentials;
-use s3::bucket::Bucket;
+extern crate rusoto_s3;
+extern crate rusoto_credential;
+extern crate rusoto_core;
+
+use std::str::FromStr;
+use std::io::Read;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncReadExt;
+
+use rusoto_s3::S3Client;
+use rusoto_s3::S3;
+//use tokio::io::util::async_read_ext::AsyncReadExt;
 
 pub struct StorageS3 {
-    bucket: Option<Bucket>,
-    isLive : bool,
+    client: Option<S3Client>,
+    isLive: bool,
+    bucket: String,
 }
 
 impl StorageS3 {
     pub fn new(config: &Configuration, isLive: bool) -> StorageS3 {
-        let mut ss3 = StorageS3{ bucket: None, isLive: false};
+        let mut ss3 = StorageS3{ client: None, isLive: false, bucket: String::new()};
         ss3.configure(config, isLive);
         return ss3;
     }
@@ -53,33 +63,61 @@ impl StorageS3 {
 #[async_trait]
 impl Storage for StorageS3 {
     fn configure(&mut self, config: &Configuration, isLive: bool) {
-        let bucketName = match isLive {
+        self.bucket = match isLive {
             true => &config.s3_bucket_live,
             false => &config.s3_bucket_pending,
-        };
-        let creds = Credentials::new(
-            Some(config.s3_access_key.clone()),
-            Some(config.s3_secret_key.clone()),
-            None, None);
-        self.bucket = Some(Bucket::new(bucketName, config.s3_region.parse().unwrap(), creds).unwrap());
+        }.clone();
+        let creds = rusoto_credential::StaticProvider::new_minimal(
+            config.s3_access_key.clone(),
+            config.s3_secret_key.clone()
+            );
+        self.client = Some(S3Client::new_with(
+            rusoto_core::request::HttpClient::new().unwrap(),
+            creds,
+            rusoto_core::Region::from_str(&config.s3_region).unwrap()
+            ));
         self.isLive = isLive;
     }
-    // FIXME sync functions, sync functions everywhere!!!
+
     async fn get(&self, key: &String) -> Vec<u8> {
-        return self.bucket.as_ref().unwrap().get_object(&format!("/{}", key)).unwrap().0;
+        let resp = self.client.as_ref().unwrap().get_object(
+            rusoto_s3::GetObjectRequest {
+                bucket: self.bucket.clone(),
+                key: format!("/{}", key),
+                ..Default::default()
+            }).await.unwrap();
+        //let len = resp.content_length.unwrap();
+        let mut astream = resp.body.unwrap().into_async_read();
+        let mut buffer = Vec::new();
+        astream.read_to_end(&mut buffer).await;
+        return buffer;
     }
     async fn store(&self, key: &String, data: &[u8]) {
-        self.bucket.as_ref().unwrap().put_object(&format!("/{}", key), data, "image/unknown").unwrap();
+        //let haha : Result<bytes::Bytes, std::io::Error> = Ok(bytes::Bytes::from(data));
+        //let mut sdata = futures::stream::iter(haha);
+        let sdata = data.to_vec(); // err, does this copies??
+        self.client.as_ref().unwrap().put_object(
+            rusoto_s3::PutObjectRequest {
+                key: format!("/{}", key),
+                bucket: self.bucket.clone(),
+                body: Some(rusoto_core::ByteStream::from(sdata)),
+                ..Default::default()
+            }).await.unwrap();
     }
     async fn delete(&self, key: &String) {
-        self.bucket.as_ref().unwrap().delete_object(&format!("/{}", key)).unwrap();
+        self.client.as_ref().unwrap().delete_object(
+            rusoto_s3::DeleteObjectRequest {
+                key: format!("/{}", key),
+                bucket: self.bucket.clone(),
+                ..Default::default()
+            }).await.unwrap();
     }
     async fn urlFor(&self, key: &String) -> String {
         if self.isLive {
-           return format!("http://s3.amazonaws.com/{}/{}", self.bucket.as_ref().unwrap().name(), key);
+           return format!("http://s3.amazonaws.com/{}/{}", self.bucket, key);
         } else {
             // FIXME: signed request, pending bucket might not be public
-            return format!("http://s3.amazonaws.com/{}/{}", self.bucket.as_ref().unwrap().name(), key);
+            return format!("http://s3.amazonaws.com/{}/{}", self.bucket, key);
         }
     }
 }
