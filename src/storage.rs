@@ -83,7 +83,7 @@ impl Storage for StorageS3 {
         let resp = self.client.as_ref().unwrap().get_object(
             rusoto_s3::GetObjectRequest {
                 bucket: self.bucket.clone(),
-                key: format!("/{}", key),
+                key: key.clone(),
                 ..Default::default()
             }).await.unwrap();
         //let len = resp.content_length.unwrap();
@@ -98,7 +98,7 @@ impl Storage for StorageS3 {
         let sdata = data.to_vec(); // err, does this copies??
         self.client.as_ref().unwrap().put_object(
             rusoto_s3::PutObjectRequest {
-                key: format!("/{}", key),
+                key: key.clone(),
                 bucket: self.bucket.clone(),
                 body: Some(rusoto_core::ByteStream::from(sdata)),
                 ..Default::default()
@@ -107,17 +107,17 @@ impl Storage for StorageS3 {
     async fn delete(&self, key: &String) {
         self.client.as_ref().unwrap().delete_object(
             rusoto_s3::DeleteObjectRequest {
-                key: format!("/{}", key),
+                key: key.clone(),
                 bucket: self.bucket.clone(),
                 ..Default::default()
             }).await.unwrap();
     }
     async fn urlFor(&self, key: &String) -> String {
         if self.isLive {
-           return format!("http://s3.amazonaws.com/{}/{}", self.bucket, key);
+           return format!("http://{}.s3.amazonaws.com/{}", self.bucket, key);
         } else {
             // FIXME: signed request, pending bucket might not be public
-            return format!("http://s3.amazonaws.com/{}/{}", self.bucket, key);
+            return format!("http://{}.s3.amazonaws.com/{}", self.bucket, key);
         }
     }
 }

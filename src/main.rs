@@ -5,11 +5,9 @@ Wish-list:
   * all image operations delegated to asynchronous workers
   * vanity URLs
   * encoded user id in url
-  * async S3
   * signed S3 queries for pending bucket
   * pagination/filtering in "my images"
   * automatic DB creation and provisioned migration for future schema changes
-  * allow viewing full-sized image
 */
 
 extern crate warp;
