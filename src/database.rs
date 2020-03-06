@@ -44,7 +44,7 @@ impl Database {
     }
     pub async fn quota(&mut self, user: u64) -> (u64, u64) {
         let biuser = user as i64;
-        let rows = &self.conn.query("SELECT count(1), CAST(sum(size) AS bigint) FROM images WHERE deleted_at IS NULL and uploader = $1;",
+        let rows = &self.conn.query("SELECT count(1), CAST(COALESCE(sum(size),0) AS bigint) FROM images WHERE deleted_at IS NULL and uploader = $1;",
             &[&biuser]).await.unwrap();
        let count: i64 = rows[0].get(0);
        let sz: i64 = rows[0].get(1);
