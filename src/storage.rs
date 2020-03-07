@@ -4,32 +4,32 @@ use super::types::Configuration;
 
 #[async_trait]
 pub trait Storage: Sync + Send {
-    fn configure(&mut self, config: &Configuration, isLive: bool) {}
+    fn configure(&mut self, _config: &Configuration, _is_live: bool) {}
     async fn get(&self, key: &String) -> Vec<u8>;
     async fn store(&self, key: &String, data: &[u8]);
     async fn delete(&self, key: &String);
-    async fn urlFor(&self, key: &String) -> String;
+    async fn url_for(&self, key: &String) -> String;
 }
 
 
 pub struct StorageLocal {
-    pub pathBase: String,
-    pub urlBase: String,
+    pub path_base: String,
+    pub url_base: String,
 }
 
 #[async_trait]
 impl Storage for StorageLocal {
     async fn get(&self, key: &String) -> Vec<u8> {
-        return fs::read(format!("{}/{}", self.pathBase, key)).unwrap();
+        return fs::read(format!("{}/{}", self.path_base, key)).unwrap();
     }
     async fn store(&self, key: &String, data: &[u8]) {
-        fs::write(format!("{}/{}", self.pathBase, key), data);
+        fs::write(format!("{}/{}", self.path_base, key), data).unwrap();
     }
     async fn delete(&self, key: &String) {
-        fs::remove_file(format!("{}/{}", self.pathBase, key));
+        fs::remove_file(format!("{}/{}", self.path_base, key)).unwrap();
     }
-    async fn urlFor(&self, key: &String) -> String {
-        return format!("{}/{}", self.urlBase, key);
+    async fn url_for(&self, key: &String) -> String {
+        return format!("{}/{}", self.url_base, key);
     }
 }
 
@@ -38,32 +38,30 @@ extern crate rusoto_credential;
 extern crate rusoto_core;
 
 use std::str::FromStr;
-use std::io::Read;
-use tokio::io::AsyncRead;
+//use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 
 use rusoto_s3::S3Client;
 use rusoto_s3::S3;
-//use tokio::io::util::async_read_ext::AsyncReadExt;
 
 pub struct StorageS3 {
     client: Option<S3Client>,
-    isLive: bool,
+    is_live: bool,
     bucket: String,
 }
 
 impl StorageS3 {
-    pub fn new(config: &Configuration, isLive: bool) -> StorageS3 {
-        let mut ss3 = StorageS3{ client: None, isLive: false, bucket: String::new()};
-        ss3.configure(config, isLive);
+    pub fn new(config: &Configuration, is_live: bool) -> StorageS3 {
+        let mut ss3 = StorageS3{ client: None, is_live: false, bucket: String::new()};
+        ss3.configure(config, is_live);
         return ss3;
     }
 }
 
 #[async_trait]
 impl Storage for StorageS3 {
-    fn configure(&mut self, config: &Configuration, isLive: bool) {
-        self.bucket = match isLive {
+    fn configure(&mut self, config: &Configuration, is_live: bool) {
+        self.bucket = match is_live {
             true => &config.s3_bucket_live,
             false => &config.s3_bucket_pending,
         }.clone();
@@ -76,7 +74,7 @@ impl Storage for StorageS3 {
             creds,
             rusoto_core::Region::from_str(&config.s3_region).unwrap()
             ));
-        self.isLive = isLive;
+        self.is_live = is_live;
     }
 
     async fn get(&self, key: &String) -> Vec<u8> {
@@ -89,7 +87,7 @@ impl Storage for StorageS3 {
         //let len = resp.content_length.unwrap();
         let mut astream = resp.body.unwrap().into_async_read();
         let mut buffer = Vec::new();
-        astream.read_to_end(&mut buffer).await;
+        astream.read_to_end(&mut buffer).await.unwrap();
         return buffer;
     }
     async fn store(&self, key: &String, data: &[u8]) {
@@ -112,8 +110,8 @@ impl Storage for StorageS3 {
                 ..Default::default()
             }).await.unwrap();
     }
-    async fn urlFor(&self, key: &String) -> String {
-        if self.isLive {
+    async fn url_for(&self, key: &String) -> String {
+        if self.is_live {
            return format!("http://{}.s3.amazonaws.com/{}", self.bucket, key);
         } else {
             // pending images are proxied by us for auth check

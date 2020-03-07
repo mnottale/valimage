@@ -9,7 +9,7 @@ pub struct AuthenticatorDemo {
 
 impl Authenticator for AuthenticatorDemo {
     fn authenticate(&self, username: &String, password: &String) -> Option<AuthInfo> {
-        let mut role = "guest".to_string();
+        let mut role = String::new();
         let first = username.chars().next().unwrap();
         if first == 'u' {
             role = "user".to_string();
@@ -24,7 +24,7 @@ impl Authenticator for AuthenticatorDemo {
             return None;
         }
         return Some(AuthInfo { 
-            userId: u64::from_str_radix(password, 10).unwrap_or(42),
+            user_id: u64::from_str_radix(password, 10).unwrap_or(42),
             username: username.clone(),
             role: role
         });

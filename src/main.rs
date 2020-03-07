@@ -27,9 +27,6 @@ use std::fs;
 use headers::{Cookie, HeaderMapExt};
 use warp::Filter;
 use warp::header;
-use warp::Rejection;
-use warp::reject;
-use warp::reject::custom;
 use warp::http::{HeaderMap, StatusCode, Response};
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -42,7 +39,6 @@ mod storage;
 mod types;
 mod auth;
 
-use storage::Storage;
 use auth::{Authenticator, AuthenticatorDemo};
 use serde::{Deserialize, Serialize};
 use types::{Configuration, Page, ValidationResult};
@@ -52,11 +48,11 @@ use types::{Configuration, Page, ValidationResult};
 pub type DB = Arc<Mutex<database::Database>>;
 
 struct Storages {
-    storageValidated: Box<dyn storage::Storage>,
-    storagePending: Box<dyn storage::Storage>,
+    storage_validated: Box<dyn storage::Storage>,
+    storage_pending: Box<dyn storage::Storage>,
 }
 
-struct Context {
+pub struct Context {
     storages: Storages,
     db: DB,
     quota_count: u64,
@@ -68,8 +64,8 @@ struct Context {
 pub type ContextRef = Arc<Context>;
 
 #[derive(Deserialize, Serialize)]
-struct AuthInfo {
-    userId: u64,
+pub struct AuthInfo {
+    user_id: u64,
     username: String,
     role: String,
 }
@@ -105,18 +101,18 @@ async fn api_login(login: types::Login, authenticator: Arc<AuthenticatorDemo>, s
 }
 
 async fn api_image_pending_content(key: String, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
-    if ai.userId == 0 {
+    if ai.user_id == 0 {
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"not logged in".to_vec()).unwrap());
     }
-    let mut uidMatch = 0;
+    let mut uid_match = 0;
     if ai.role == "user" {
-        uidMatch = ai.userId;
+        uid_match = ai.user_id;
     }
     let mut dbl = ctx.db.lock().await;
-    if let Some(entry) = dbl.getOneByKeyIf(&key, uidMatch).await {
+    if let Some(entry) = dbl.get_one_by_key_if(&key, uid_match).await {
         let stor = match entry.validated {
-            0 => &ctx.storages.storageValidated,
-            _ => &ctx.storages.storagePending,
+            0 => &ctx.storages.storage_validated,
+            _ => &ctx.storages.storage_pending,
         };
         let data = stor.get(&entry.key).await;
         Ok(Response::builder().status(StatusCode::OK).body(data).unwrap())
@@ -126,38 +122,38 @@ async fn api_image_pending_content(key: String, ai: AuthInfo, ctx: ContextRef) -
     }
 }
 
-async fn api_delete(imageId:u32, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
-    if ai.userId == 0 {
+async fn api_delete(image_id:u32, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
+    if ai.user_id == 0 {
         return Ok(warp::reply::json(&false));
     }
-    let mut uidMatch = 0;
+    let mut uid_match = 0;
     if ai.role == "user" {
-        uidMatch = ai.userId;
+        uid_match = ai.user_id;
     }
     let mut dbl = ctx.db.lock().await;
-    if let Some(entry) = dbl.getOneIf(imageId, uidMatch).await {
+    if let Some(entry) = dbl.get_one_if(image_id, uid_match).await {
         let stor = match entry.validated {
-            0 => &ctx.storages.storageValidated,
-            _ => &ctx.storages.storagePending,
+            0 => &ctx.storages.storage_validated,
+            _ => &ctx.storages.storage_pending,
         };
         stor.delete(&entry.key).await;
-        dbl.deleteOne(imageId).await;
+        dbl.delete_one(image_id).await;
         return Ok(warp::reply::json(&true));
     }
     return Ok(warp::reply::json(&false));
 }
 async fn api_myimages(page: Page, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
-    if ai.userId == 0 {
+    if ai.user_id == 0 {
         let empty : Vec<i32> = Vec::new();
         return Ok(warp::reply::json(&empty));
     }
-    let mut res = ctx.db.lock().await.allByUser(ai.userId as u32, page).await;
+    let mut res = ctx.db.lock().await.all_by_user(ai.user_id as u32, page).await;
     for entry in &mut res {
         let stor = match entry.validated {
-            0 => &ctx.storages.storageValidated,
-            _ => &ctx.storages.storagePending,
+            0 => &ctx.storages.storage_validated,
+            _ => &ctx.storages.storage_pending,
         };
-        entry.key = stor.urlFor(&entry.key).await;
+        entry.key = stor.url_for(&entry.key).await;
     }
     return Ok(warp::reply::json(&res));
 }
@@ -167,13 +163,13 @@ async fn api_images_to_validate(page: Page, ai: AuthInfo, ctx: ContextRef) -> Re
         let empty : Vec<i32> = Vec::new();
         return Ok(warp::reply::json(&empty));
     }
-    let mut res = ctx.db.lock().await.pendingValidation(page).await;
+    let mut res = ctx.db.lock().await.pending_validation(page).await;
     for entry in &mut res {
         let stor = match entry.validated {
-            0 => &ctx.storages.storageValidated,
-            _ => &ctx.storages.storagePending,
+            0 => &ctx.storages.storage_validated,
+            _ => &ctx.storages.storage_pending,
         };
-        entry.key = stor.urlFor(&entry.key).await;
+        entry.key = stor.url_for(&entry.key).await;
     }
     return Ok(warp::reply::json(&res));
 }
@@ -182,23 +178,23 @@ async fn api_reply(vr: ValidationResult, ai: AuthInfo, ctx: ContextRef) -> Resul
     if ai.role != "reviewer" {
         return Ok(warp::reply::json(&false));
     }
-    let key = ctx.db.lock().await.setResponse(vr.id, vr.response).await;
+    let key = ctx.db.lock().await.set_response(vr.id, vr.response).await;
     if vr.response == 0 {
         // Validated, we must move the image from one storage to the other
-        ctx.storages.storageValidated.store(&key, &ctx.storages.storagePending.get(&key).await).await;
-        ctx.storages.storagePending.delete(&key).await;
+        ctx.storages.storage_validated.store(&key, &ctx.storages.storage_pending.get(&key).await).await;
+        ctx.storages.storage_pending.delete(&key).await;
     }
     return Ok(warp::reply::json(&true));
 }
 
 async fn api_by_user(usr: u32, validated: bool, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
- let mut res = ctx.db.lock().await.byUser(usr, validated, Page{limit: 100, offset: 0}).await;
+ let mut res = ctx.db.lock().await.by_user(usr, validated, Page{limit: 100, offset: 0}).await;
  let stor = match validated {
-     true => &ctx.storages.storageValidated,
-     false => &ctx.storages.storagePending,
+     true => &ctx.storages.storage_validated,
+     false => &ctx.storages.storage_pending,
  };
  for entry in &mut res {
-     entry.url = stor.urlFor(&entry.url).await;
+     entry.url = stor.url_for(&entry.url).await;
  }
  return Ok(warp::reply::json(&res));
 }
@@ -207,13 +203,13 @@ fn make_key() -> String {
     let mut res = "img".to_string();
     let mut rng = thread_rng();
     let distr = rand::distributions::Uniform::new_inclusive('a' as i32, 'z' as i32);
-    for i in 0..32 {
+    for _i in 0..32 {
         res.push((rng.sample(distr) as u8) as char);
     }
     return res;
 }
 async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
-    if (ai.role != "user") {
+    if ai.role != "user" {
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"".to_vec()).unwrap());
     }
     let len = bytes.len() as u64;
@@ -222,7 +218,7 @@ async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextR
     }
     let mut dbl = ctx.db.lock().await;
     // quota check
-    let (cur_count, cur_sz) = dbl.quota(ai.userId).await;
+    let (cur_count, cur_sz) = dbl.quota(ai.user_id).await;
     if (ctx.quota_count != 0 && ctx.quota_count <= cur_count) || (ctx.quota_size != 0 && ctx.quota_size < cur_sz + len) {
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"over quota".to_vec()).unwrap());
     }
@@ -231,8 +227,8 @@ async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextR
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"file type not accepted".to_vec()).unwrap());
     }
     let key = make_key();
-    ctx.storages.storagePending.store(&key, &bytes).await;
-    dbl.upload(ai.userId, &key, len).await;
+    ctx.storages.storage_pending.store(&key, &bytes).await;
+    dbl.upload(ai.user_id, &key, len).await;
     return Ok(Response::builder().status(StatusCode::OK).body(b"".to_vec()).unwrap());
 }
 
@@ -250,7 +246,7 @@ fn with_something(s: String) -> impl Filter<Extract = (String,), Error = Infalli
 
 // uid/username/role/timestamp/signature
 fn extract_auth(secret: &String, bearer: &String) -> AuthInfo {
-    let default = AuthInfo { userId: 0, username: "".to_string(), role: "guest".to_string()};
+    let default = AuthInfo { user_id: 0, username: "".to_string(), role: "guest".to_string()};
     let comps : Vec<&str> = bearer.split('/').collect();
     if comps.len() != 5 {
         return default;
@@ -262,13 +258,13 @@ fn extract_auth(secret: &String, bearer: &String) -> AuthInfo {
     if expect != comps[4] {
         return default;
     }
-    let nowEpoch = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-    let bearerTS = u64::from_str_radix(comps[3], 10).unwrap_or(0);
-    if nowEpoch - bearerTS > 3600 { // TODO: un-hardcode this
+    let now_epoch = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+    let bearer_ts = u64::from_str_radix(comps[3], 10).unwrap_or(0);
+    if now_epoch - bearer_ts > 3600 { // TODO: un-hardcode this
         return default;
     }
     return AuthInfo {
-        userId: u64::from_str_radix(comps[0], 10).unwrap_or(0),
+        user_id: u64::from_str_radix(comps[0], 10).unwrap_or(0),
         username: comps[1].to_string(),
         role: comps[2].to_string(),
     }
@@ -276,17 +272,17 @@ fn extract_auth(secret: &String, bearer: &String) -> AuthInfo {
 
 fn encode_auth(secret: &String, ai: &AuthInfo) -> String {
     let ts = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-    let to_sign = format!("{}@{}/{}/{}/{}", secret, ai.userId, ai.username, ai.role, ts);
+    let to_sign = format!("{}@{}/{}/{}/{}", secret, ai.user_id, ai.username, ai.role, ts);
     let mut hasher = Sha256::new();
     hasher.input(to_sign);
     let expect = hex::encode(hasher.result());
-    return format!("{}/{}/{}/{}/{}", ai.userId, ai.username, ai.role, ts, expect);
+    return format!("{}/{}/{}/{}/{}", ai.user_id, ai.username, ai.role, ts, expect);
 }
 
 fn with_auth(secret: &String) -> impl Filter<Extract = (AuthInfo,), Error = std::convert::Infallible> + Clone {
     let csec = secret.clone();
     header::headers_cloned().map(move |headers: HeaderMap| {
-            let default = AuthInfo { userId: 0, username: "".to_string(), role: "guest".to_string()};
+            let default = AuthInfo { user_id: 0, username: "".to_string(), role: "guest".to_string()};
             let cookies = headers.typed_get::<Cookie>();
             match cookies {
                 None => default,
@@ -305,32 +301,32 @@ fn with_login_credentials() -> impl Filter<Extract = (types::Login,), Error = wa
 
 #[tokio::main]
 async fn main() {
-    let configContent = fs::read_to_string("config.yaml").unwrap();
-    let config : Configuration = serde_yaml::from_str(&configContent).unwrap();
+    let config_content = fs::read_to_string("config.yaml").unwrap();
+    let config : Configuration = serde_yaml::from_str(&config_content).unwrap();
     let secret = match config.secret.len() {
         0 => make_key(),
         _ => config.secret.clone()
     };
-    let mut db_inner = database::Database::new(&config.database).await;
-    let mut db = Arc::new(Mutex::new(db_inner));
-    let storagePending : Box<dyn storage::Storage> = match config.s3_bucket_pending.len() {
+    let db_inner = database::Database::new(&config.database).await;
+    let db = Arc::new(Mutex::new(db_inner));
+    let storage_pending : Box<dyn storage::Storage> = match config.s3_bucket_pending.len() {
         0 => Box::new(storage::StorageLocal{
-            pathBase: "store/pending".to_string(),
-            urlBase: "/pending".to_string()
+            path_base: "store/pending".to_string(),
+            url_base: "/pending".to_string()
         }),
         _ => Box::new(storage::StorageS3::new(&config, false))
     };
-    let storageValidated : Box<dyn storage::Storage> = match config.s3_bucket_live.len() {
+    let storage_validated : Box<dyn storage::Storage> = match config.s3_bucket_live.len() {
         0 => Box::new(
             storage::StorageLocal{
-                pathBase: "store/live".to_string(),
-                urlBase: "/live".to_string()
+                path_base: "store/live".to_string(),
+                url_base: "/live".to_string()
             }),
         _ => Box::new(storage::StorageS3::new(&config, true))
     };
     let storages = Storages {
-        storagePending: storagePending,
-        storageValidated: storageValidated,
+        storage_pending: storage_pending,
+        storage_validated: storage_validated,
     };
     let context = Arc::new(Context {
             db: db,

@@ -1,7 +1,6 @@
 extern crate tokio_postgres;
-use tokio_postgres::{Client, NoTls, Error};
+use tokio_postgres::{Client, NoTls};
 
-use std::time::{Duration, SystemTime};
 
 use super::types::{Image, Entry, Page};
 /*
@@ -50,7 +49,7 @@ impl Database {
        let sz: i64 = rows[0].get(1);
        return (count as u64, sz as u64);
     }
-    pub async fn byUser(&mut self, user: u32, validated: bool, page: Page) -> Vec<Image> {
+    pub async fn by_user(&mut self, user: u32, validated: bool, page: Page) -> Vec<Image> {
         println!("Entering query");
         let biuser = user as i64;
         let bilimit = page.limit as i64;
@@ -65,8 +64,8 @@ impl Database {
         }
         return res;
     }
-    pub async fn getOneByKeyIf(&mut self, key: &str, userId: u64) -> Option<Entry> {
-        let biuser = userId as i64;
+    pub async fn get_one_by_key_if(&mut self, key: &str, user_id: u64) -> Option<Entry> {
+        let biuser = user_id as i64;
         let bikey = key.to_string();
         let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images where key=$1 AND deleted_at IS NULL AND (uploader = $2 OR $2 = 0);",
             &[&bikey, &biuser]).await.unwrap();
@@ -85,9 +84,9 @@ impl Database {
             key: row.get(3)
         });
        }
-    pub async fn getOneIf(&mut self, id: u32, userId: u64) -> Option<Entry> {
+    pub async fn get_one_if(&mut self, id: u32, user_id: u64) -> Option<Entry> {
         let biid = id as i32;
-        let biuser = userId as i64;
+        let biuser = user_id as i64;
         let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images where id=$1 AND deleted_at IS NULL AND (uploader = $2 OR $2 = 0);",
             &[&biid, &biuser]).await.unwrap();
         if rows.len() == 0 {
@@ -105,11 +104,11 @@ impl Database {
             key: row.get(3)
         });
     }
-    pub async fn deleteOne(&mut self, id: u32) {
+    pub async fn delete_one(&mut self, id: u32) {
         let biid = id as i32;
         &self.conn.query("UPDATE images SET deleted_at=NOW() WHERE id=$1;", &[&biid]).await.unwrap();
     }
-    pub async fn allByUser(&mut self, user: u32, page: Page) -> Vec<Entry> {
+    pub async fn all_by_user(&mut self, user: u32, page: Page) -> Vec<Entry> {
         let biuser = user as i64;
         let bilimit = page.limit as i64;
         let bioffset = page.offset as i64;
@@ -129,7 +128,7 @@ impl Database {
         }
         return res;
     }
-    pub async fn pendingValidation(&mut self, page: Page) -> Vec<Entry> {
+    pub async fn pending_validation(&mut self, page: Page) -> Vec<Entry> {
         let bilimit = page.limit as i64;
         let bioffset = page.offset as i64;
         let mut res = Vec::new();
@@ -149,7 +148,7 @@ impl Database {
         }
         return res;
     }
-    pub async fn setResponse(&mut self, id: u32, response: u32) -> String {
+    pub async fn set_response(&mut self, id: u32, response: u32) -> String {
         let biid = id as i32;
         let iresp = response as i32;
         let rows = &self.conn.query("UPDATE images SET response=$1 WHERE id=$2 returning(key);",
