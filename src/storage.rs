@@ -116,8 +116,8 @@ impl Storage for StorageS3 {
         if self.isLive {
            return format!("http://{}.s3.amazonaws.com/{}", self.bucket, key);
         } else {
-            // FIXME: signed request, pending bucket might not be public
-            return format!("http://{}.s3.amazonaws.com/{}", self.bucket, key);
+            // pending images are proxied by us for auth check
+            return format!("/pending/{}", key);
         }
     }
 }

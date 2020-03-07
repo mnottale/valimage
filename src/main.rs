@@ -5,9 +5,10 @@ Wish-list:
   * all image operations delegated to asynchronous workers
   * vanity URLs
   * encoded user id in url
-  * signed S3 queries for pending bucket
   * pagination/filtering in "my images"
   * automatic DB creation and provisioned migration for future schema changes
+  * support multiple reviewershààh in parallel
+  * store and use content-type
 */
 
 extern crate warp;
@@ -83,7 +84,7 @@ async fn api_logout() -> Result<impl warp::Reply, Infallible> {
         .header(warp::http::header::LOCATION, "/")
         .header(
             warp::http::header::SET_COOKIE,
-            "BEARER=; SameSite=Strict; HttpOpnly",
+            "BEARER=; SameSite=Strict; path=/; HttpOpnly",
             )
         .body(b"true".to_vec()).unwrap())
 }
@@ -97,9 +98,31 @@ async fn api_login(login: types::Login, authenticator: Arc<AuthenticatorDemo>, s
             .header(warp::http::header::LOCATION, "/")
             .header(
                 warp::http::header::SET_COOKIE,
-                format!("BEARER={}; SameSite=Strict; HttpOpnly", encode_auth(&secret, &info)),
+                format!("BEARER={}; SameSite=Strict; path=/; HttpOpnly", encode_auth(&secret, &info)),
             )
             .body(b"true".to_vec()).unwrap())
+    }
+}
+
+async fn api_image_pending_content(key: String, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
+    if ai.userId == 0 {
+        return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"not logged in".to_vec()).unwrap());
+    }
+    let mut uidMatch = 0;
+    if ai.role == "user" {
+        uidMatch = ai.userId;
+    }
+    let mut dbl = ctx.db.lock().await;
+    if let Some(entry) = dbl.getOneByKeyIf(&key, uidMatch).await {
+        let stor = match entry.validated {
+            0 => &ctx.storages.storageValidated,
+            _ => &ctx.storages.storagePending,
+        };
+        let data = stor.get(&entry.key).await;
+        Ok(Response::builder().status(StatusCode::OK).body(data).unwrap())
+    }
+    else {
+        Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"image not found".to_vec()).unwrap())
     }
 }
 
@@ -117,7 +140,7 @@ async fn api_delete(imageId:u32, ai: AuthInfo, ctx: ContextRef) -> Result<impl w
             0 => &ctx.storages.storageValidated,
             _ => &ctx.storages.storagePending,
         };
-        stor.delete(&entry.key);
+        stor.delete(&entry.key).await;
         dbl.deleteOne(imageId).await;
         return Ok(warp::reply::json(&true));
     }
@@ -360,8 +383,12 @@ async fn main() {
         .and(with_auth(&secret))
         .and(with_context(context.clone()))
         .and_then(api_upload);
-    let r_imgs_pending = warp::path("pending")
-        .and(warp::fs::dir("store/pending"));
+    let r_api_image_pending_content = warp::path!("pending" / String)
+        .and(with_auth(&secret))
+        .and(with_context(context.clone()))
+        .and_then(api_image_pending_content);
+    //let r_imgs_pending = warp::path("pending")
+    //    .and(warp::fs::dir("store/pending"));
     let r_imgs_live = warp::path("live")
         .and(warp::fs::dir("store/live"));
     let r_static = warp::path("static").and(warp::fs::dir("static"));
@@ -378,7 +405,7 @@ async fn main() {
           .or(r_api_delete)
           .or(r_index)
           .or(r_static)
-          .or(r_imgs_pending)
+          .or(r_api_image_pending_content)
           .or(r_imgs_live))
         .run(([0, 0, 0, 0], 3030))
         .await;

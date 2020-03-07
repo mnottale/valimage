@@ -65,6 +65,26 @@ impl Database {
         }
         return res;
     }
+    pub async fn getOneByKeyIf(&mut self, key: &str, userId: u64) -> Option<Entry> {
+        let biuser = userId as i64;
+        let bikey = key.to_string();
+        let rows = &self.conn.query("SELECT id, response, submitted_at, key, uploader FROM images where key=$1 AND deleted_at IS NULL AND (uploader = $2 OR $2 = 0);",
+            &[&bikey, &biuser]).await.unwrap();
+        if rows.len() == 0 {
+            return None;
+        }
+        let row = &rows[0];
+        let val : Option<i32> = row.get(1);
+        let id : i32 = row.get(0);
+        let uploader : i64 = row.get(4);
+        return Some(Entry {
+            id: id as u32,
+            uploader: uploader as u32,
+            validated: val.unwrap_or(-1),
+            submitted_at: row.get(2),
+            key: row.get(3)
+        });
+       }
     pub async fn getOneIf(&mut self, id: u32, userId: u64) -> Option<Entry> {
         let biid = id as i32;
         let biuser = userId as i64;
