@@ -189,11 +189,12 @@ impl Database {
         }
         return res;
     }
-    pub async fn set_response(&mut self, id: u32, response: u32) -> String {
+    pub async fn set_response(&mut self, id: u32, response: u32, by: u64) -> String {
         let biid = id as i32;
+        let biby = by as i64;
         let iresp = response as i32;
-        let rows = &self.conn.query("UPDATE images SET response=$1 WHERE id=$2 returning(key);",
-            &[&iresp, &biid]).await.unwrap();
+        let rows = &self.conn.query("UPDATE images SET response=$1, validated_by=$2, validated_at=NOW() WHERE id=$3 returning(key);",
+            &[&iresp, &biby, &biid]).await.unwrap();
         return rows[0].get(0);
     }
 }

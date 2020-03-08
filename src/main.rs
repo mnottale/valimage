@@ -192,7 +192,7 @@ async fn api_reply(vr: ValidationResult, ai: AuthInfo, ctx: ContextRef) -> Resul
     if ai.role != "reviewer" {
         return Ok(warp::reply::json(&false));
     }
-    let key = ctx.db.lock().await.set_response(vr.id, vr.response).await;
+    let key = ctx.db.lock().await.set_response(vr.id, vr.response, ai.user_id).await;
     if vr.response == 0 {
         // Validated, we must move the image from one storage to the other
         ctx.storages.storage_validated.store(&key, &ctx.storages.storage_pending.get(&key).await).await;
