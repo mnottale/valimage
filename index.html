@@ -59,7 +59,7 @@ role="guest";
 
 imageMenu = {
     "user": '<button type="button" id=@ID onclick="doDelete(this)">Delete</button>',
-    "reviewer": '<button type="button" id=@ID onclick="doAccept(this)">Accept</button><button type="button" id=@ID onclick="doDecline(this)">Decline</button>'
+    "reviewer": '<button type="button" id=@ID onclick="doAccept(this)">Accept</button><button type="button" id=@ID onclick="doDecline(this)">Decline</button><button type="button" id=@ID onclick="doDelete(this)">Delete</button>'
 }
 
 
@@ -171,7 +171,7 @@ function doInitialize() {
 function doImageMenu(span)
 {
     span.children[0].height = 180;
-    span.children[1].innerHTML = imageMenu[role].replace("@ID", span.id).replace("@ID", span.id);
+    span.children[1].innerHTML = imageMenu[role].replace("@ID", span.id).replace("@ID", span.id).replace("@ID", span.id);
 }
 
 function doImageMenuHide(span)
@@ -222,6 +222,22 @@ function doPendingImages() {
     });
 }
 
+function doQuery() {
+    var user = 0;
+    var ut = document.getElementById('tUser').value;
+    if (ut != '')
+        user = parseInt(ut);
+    apiCall("/api/query", {
+            validated: document.getElementById('cValidated').checked,
+            declined: document.getElementById('cDeclined').checked,
+            pending: document.getElementById('cPending').checked,
+            key: document.getElementById('tKey').value,
+            user: user,
+            page: {limit: 100, offset: 0}
+    }, function(res) {
+            showImages(res);
+    });
+}
 function doAccept(el) {
     var imgId = parseInt(el.id);
     apiCall("/api/reply", {id: imgId, response: 0}, function(res) {
@@ -284,8 +300,20 @@ function doHideFullscreen() {
 
 
 <div id="dMenuReviewer" style="display:hidden">
-Review menu
 <button type="button" onclick="doPendingImages()">Pending validation</button>
+<br/>
+<div id="dAdvancedQuery">
+  <p>Advanced query</p>
+  accepted <input type="checkbox" id="cValidated" checked>
+  declined <input type="checkbox" id="cDeclined" checked>
+  pending <input type="checkbox" id="cPending" checked>
+  <br/>
+  uploader: <input type="text" id="tUser" placeholder="uploader id">
+  <br/>
+  key: <input type="text" id="tKey" placeholder="image key">
+  <br/>
+  <button type="button" onclick="doQuery()">Query</button>
+</div>
 </div>
 
 

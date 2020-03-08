@@ -61,3 +61,13 @@ pub struct Page {
     pub limit: u32,
     pub offset: u32,
 }
+
+#[derive(Deserialize, Serialize)]
+pub struct ImagesQuery {
+    pub validated: bool,
+    pub declined: bool,
+    pub pending: bool,
+    pub key: String,
+    pub user: u32,
+    pub page: Page,
+}

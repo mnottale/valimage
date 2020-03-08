@@ -2,7 +2,7 @@ extern crate tokio_postgres;
 use tokio_postgres::{Client, NoTls};
 
 
-use super::types::{Image, Entry, Page};
+use super::types::{Image, Entry, Page, ImagesQuery};
 /*
 CREATE TABLE images(
    id serial PRIMARY KEY,
@@ -103,6 +103,47 @@ impl Database {
             submitted_at: row.get(2),
             key: row.get(3)
         });
+    }
+    pub async fn query(&mut self, q: &ImagesQuery) -> Vec<Entry> {
+        let mut sql = "SELECT id, uploader, response, submitted_at, key FROM images WHERE deleted_at is NULL ".to_string();
+        sql += " AND (false ";
+        if q.validated {
+            sql += " OR response = 0 ";
+        }
+        if q.declined {
+            sql += " OR response > 0 ";
+        }
+        if q.pending {
+            sql += " OR response IS NULL ";
+        }
+        sql += ") ";
+        if q.user != 0 {
+            sql += &format!(" AND uploader={} ", q.user); // int, we are safe
+        }
+        if q.key != "" {
+            if q.key.contains('\\') || q.key.contains('\'') {
+                panic!("Nope, invalid key.");
+            }
+            sql += &format!(" AND key='{}' ", q.key);
+        }
+        sql += " ORDER BY submitted_at LIMIT $1 OFFSET $2;";
+        let bilimit = q.page.limit as i64;
+        let bioffset = q.page.offset as i64;
+        let rows = &self.conn.query(sql.as_str(), &[&bilimit, &bioffset]).await.unwrap();
+        let mut res = Vec::new();
+        for row in rows {
+            let id : i32 = row.get(0);
+            let user : i64 = row.get(1);
+            let val : Option<i32> = row.get(2);
+            res.push(Entry{
+                    id: id as u32,
+                    uploader: user as u32,
+                    validated: val.unwrap_or(-1),
+                    submitted_at: row.get(3),
+                    key: row.get(4)
+            });
+        }
+        return res;
     }
     pub async fn delete_one(&mut self, id: u32) {
         let biid = id as i32;

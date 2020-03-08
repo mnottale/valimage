@@ -41,7 +41,7 @@ mod auth;
 
 use auth::{Authenticator, AuthenticatorDemo};
 use serde::{Deserialize, Serialize};
-use types::{Configuration, Page, ValidationResult};
+use types::{Configuration, Page, ValidationResult, ImagesQuery};
 //use database;
 //use storage;
 
@@ -173,7 +173,21 @@ async fn api_images_to_validate(page: Page, ai: AuthInfo, ctx: ContextRef) -> Re
     }
     return Ok(warp::reply::json(&res));
 }
-
+async fn api_images_query(q: ImagesQuery, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
+    if ai.role != "reviewer" {
+        let empty : Vec<i32> = Vec::new();
+        return Ok(warp::reply::json(&empty));
+    }
+    let mut res = ctx.db.lock().await.query(&q).await;
+    for entry in &mut res {
+        let stor = match entry.validated {
+            0 => &ctx.storages.storage_validated,
+            _ => &ctx.storages.storage_pending,
+        };
+        entry.key = stor.url_for(&entry.key).await;
+    }
+    return Ok(warp::reply::json(&res));
+}
 async fn api_reply(vr: ValidationResult, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
     if ai.role != "reviewer" {
         return Ok(warp::reply::json(&false));
@@ -369,6 +383,11 @@ async fn main() {
         .and(with_auth(&secret))
         .and(with_context(context.clone()))
         .and_then(api_images_to_validate);
+    let r_api_images_query = warp::path!("api" / "query")
+        .and(warp::body::json())
+        .and(with_auth(&secret))
+        .and(with_context(context.clone()))
+        .and_then(api_images_query);
     let r_api_reply = warp::path!("api" / "reply")
         .and(warp::body::json())
         .and(with_auth(&secret))
@@ -390,7 +409,7 @@ async fn main() {
     let r_static = warp::path("static").and(warp::fs::dir("static"));
     let r_index = warp::path("index.html").and(warp::fs::file("./index.html"));
     warp::serve(hello
-          .or(r_api_byuser)
+          //.or(r_api_byuser)
           .or(r_api_login)
           .or(r_api_logout)
           .or(r_api_authinfo)
@@ -399,6 +418,7 @@ async fn main() {
           .or(r_api_images_to_validate)
           .or(r_api_reply)
           .or(r_api_delete)
+          .or(r_api_images_query)
           .or(r_index)
           .or(r_static)
           .or(r_api_image_pending_content)
