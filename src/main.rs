@@ -7,7 +7,7 @@ Wish-list:
   * encoded user id in url
   * pagination/filtering in "my images"
   * automatic DB creation and provisioned migration for future schema changes
-  * support multiple reviewershààh in parallel
+  * support multiple reviewers in parallel
   * store and use content-type
 */
 

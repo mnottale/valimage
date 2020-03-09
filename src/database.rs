@@ -193,7 +193,7 @@ impl Database {
         let biid = id as i32;
         let biby = by as i64;
         let iresp = response as i32;
-        let rows = &self.conn.query("UPDATE images SET response=$1, validated_by=$2, validated_at=NOW() WHERE id=$3 returning(key);",
+        let rows = &self.conn.query("UPDATE images SET response=$1, validated_by=$2, validated_at=NOW() WHERE id=$3 AND response IS NULL returning(key);",
             &[&iresp, &biby, &biid]).await.unwrap();
         return rows[0].get(0);
     }
