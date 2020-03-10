@@ -14,6 +14,7 @@ CREATE TABLE images(
    key VARCHAR(1024),
    deleted_at TIMESTAMP,
    size BIGINT NOT NULL,
+   uploader_address VARCHAR(1024),
 );
 */
 pub struct Database {
@@ -33,11 +34,11 @@ impl Database {
         };
     }
     // postgresql://user[:password]@host[:port][/database][?param1=val1[[&param2=val2]...]]
-    pub async fn upload(&mut self, user: u64, key: &String, size: u64) -> u64 {
+    pub async fn upload(&mut self, user: u64, key: &String, size: u64, peer: Option<String>) -> u64 {
         let biuser = user as i64;
         let bisize = size as i64;
-        let rows = &self.conn.query("INSERT into images(uploader, key, submitted_at, size) VALUES($1, $2, NOW(), $3) returning (id);",
-            &[&biuser, key, &bisize]).await.unwrap();
+        let rows = &self.conn.query("INSERT into images(uploader, key, submitted_at, size, uploader_address) VALUES($1, $2, NOW(), $3, $4) returning (id);",
+            &[&biuser, key, &bisize, &peer]).await.unwrap();
         let id: i32 = rows[0].get(0);
         return id as u64;
     }

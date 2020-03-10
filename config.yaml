@@ -9,3 +9,4 @@ s3_bucket_pending: "" #leave empty for local filesystem
 s3_region: ""
 s3_access_key: ""
 s3_secret_key: ""
+store_uploader_address: true # Store IP of uploader in database

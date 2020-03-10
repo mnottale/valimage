@@ -16,6 +16,7 @@ pub struct Configuration {
     pub s3_region: String,
     pub s3_access_key: String,
     pub s3_secret_key: String,
+    pub store_uploader_address: bool,
 }
 
 

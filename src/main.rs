@@ -30,6 +30,7 @@ use warp::header;
 use warp::http::{HeaderMap, StatusCode, Response};
 use std::convert::Infallible;
 use std::sync::Arc;
+use std::net::SocketAddr;
 use tokio::sync::Mutex;
 use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
@@ -59,6 +60,7 @@ pub struct Context {
     quota_size: u64,
     max_size: u64,
     accepted_types: Vec<String>,
+    store_uploader_address: bool,
 }
 
 pub type ContextRef = Arc<Context>;
@@ -222,10 +224,14 @@ fn make_key() -> String {
     }
     return res;
 }
-async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
+async fn api_upload(peer: Option<SocketAddr>, bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextRef) -> Result<impl warp::Reply, Infallible> {
     if ai.role != "user" {
         return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"".to_vec()).unwrap());
     }
+    let peer_str = match ctx.store_uploader_address {
+        true => Some(peer.map(|p| format!("{}", p)).unwrap_or("<unknown>".to_string())),
+        false => None,
+    };
     let len = bytes.len() as u64;
     if ctx.max_size != 0 && len > ctx.max_size {
          return Ok(Response::builder().status(StatusCode::FORBIDDEN).body(b"file too big".to_vec()).unwrap());
@@ -242,7 +248,7 @@ async fn api_upload(bytes: warp::hyper::body::Bytes, ai: AuthInfo, ctx: ContextR
     }
     let key = make_key();
     ctx.storages.storage_pending.store(&key, &bytes).await;
-    dbl.upload(ai.user_id, &key, len).await;
+    dbl.upload(ai.user_id, &key, len, peer_str).await;
     return Ok(Response::builder().status(StatusCode::OK).body(b"".to_vec()).unwrap());
 }
 
@@ -349,6 +355,7 @@ async fn main() {
             quota_size: config.quota_size,
             max_size: config.max_size,
             accepted_types: config.accepted_types.clone(),
+            store_uploader_address: config.store_uploader_address,
     });
     let authenticator = Arc::new(AuthenticatorDemo{});
     let hello = warp::path!("hello" / String)
@@ -394,6 +401,7 @@ async fn main() {
         .and(with_context(context.clone()))
         .and_then(api_reply);
     let r_api_upload = warp::path!("api" / "upload")
+        .and(warp::addr::remote())
         .and(warp::body::bytes())
         .and(with_auth(&secret))
         .and(with_context(context.clone()))
