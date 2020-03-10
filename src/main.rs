@@ -20,9 +20,12 @@ extern crate rand;
 extern crate bytes;
 extern crate serde_yaml;
 extern crate tree_magic;
+extern crate log;
+extern crate simple_logging;
 
 use std::time::SystemTime;
 use std::fs;
+use log::LevelFilter;
 
 use headers::{Cookie, HeaderMapExt};
 use warp::Filter;
@@ -358,8 +361,6 @@ async fn main() {
             store_uploader_address: config.store_uploader_address,
     });
     let authenticator = Arc::new(AuthenticatorDemo{});
-    let hello = warp::path!("hello" / String)
-        .map(|name| format!("Hello, {}!", name));
 
     let r_api_byuser = warp::path!("api" / "byuser" / u32 / bool)
       .and(with_context(context.clone()))
@@ -416,9 +417,7 @@ async fn main() {
         .and(warp::fs::dir("store/live"));
     let r_static = warp::path("static").and(warp::fs::dir("static"));
     let r_index = warp::path("index.html").and(warp::fs::file("./index.html"));
-    warp::serve(hello
-          //.or(r_api_byuser)
-          .or(r_api_login)
+    let all_routes = r_api_login
           .or(r_api_logout)
           .or(r_api_authinfo)
           .or(r_api_upload)
@@ -430,7 +429,15 @@ async fn main() {
           .or(r_index)
           .or(r_static)
           .or(r_api_image_pending_content)
-          .or(r_imgs_live))
+          .or(r_imgs_live);
+    let with_logs = all_routes.with(warp::filters::log::log("valimage"));
+    if config.log_file  == "-" {
+        simple_logging::log_to_stderr(LevelFilter::Info)
+    }
+    else if config.log_file != "" {
+        simple_logging::log_to_file(&config.log_file, log::LevelFilter::Info);
+    }
+    warp::serve(with_logs)
         .run(([0, 0, 0, 0], 3030))
         .await;
 }

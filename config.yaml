@@ -10,3 +10,4 @@ s3_region: ""
 s3_access_key: ""
 s3_secret_key: ""
 store_uploader_address: true # Store IP of uploader in database
+log_file: 'log/valimage.log' # Empty to disable logging or dash to stderr
