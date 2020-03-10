@@ -11,6 +11,10 @@
     font-size: 50%;
 }
 
+#dPaginator {
+    text-align: center;
+}
+
 #dImages {
     display: flex;
     flex-wrap: wrap;
@@ -52,10 +56,15 @@
 
 <script language="javascript">
 
-// we keep those for credentials refresh
-login=""
-password="";
+PAGESIZE_MYIMAGES = 50;
+PAGESIZE_REVIEW = 16;
+PAGESIZE_QUERY = 50;
+
 role="guest";
+currentPage = 0;
+pageSize = 50;
+currentRoute = '';
+currentPayload = {};
 
 imageMenu = {
     "user": '<button type="button" id=@ID onclick="doDelete(this)">Delete</button>',
@@ -129,6 +138,7 @@ function showLogin() {
     document.getElementById("dMenuReviewer").style.display = 'none';
     document.getElementById("dMenuUser").style.display = 'none';
     document.getElementById("dImages").innerHTML = "";
+    document.getElementById("dImagesPane").style.display = "none";
 }
 
 function showImages(imgs) {
@@ -146,6 +156,39 @@ function showImages(imgs) {
         content += '</span>';
     }
     document.getElementById("dImages").innerHTML = content;
+    document.getElementById("dImagesPane").style.display = '';
+    updatePaginator(imgs.length == pageSize);
+}
+function reShow() {
+    if (currentPayload.page)
+        currentPayload.page.offset = pageSize * currentPage;
+    else
+        currentPayload.offset = pageSize * currentPage;
+    apiCall(currentRoute, currentPayload, showImages);
+}
+function showFirstPage() {
+    currentPage = 0;
+    reShow();
+}
+
+function showPrevPage() {
+    currentPage -= 1;
+    reShow();
+}
+
+function showNextPage() {
+    currentPage += 1;
+    reShow();
+}
+function updatePaginator(hasMore) {
+    var content = '<span>&lt;&lt;</span><button type="button" onclick="showFirstPage()">1</button>';
+    if (currentPage > 1)
+        content += '<button type="button" onclick="showPrevPage()">' + currentPage + '</button>';
+    if (currentPage != 0)
+        content += '<span>' + (currentPage + 1) + '</span>';
+    if (hasMore)
+        content += '<button type="button" onclick="showNextPage()">' + (currentPage+2) + '</button><span>&gt;&gt;</span>' ;
+    document.getElementById('dPaginator').innerHTML = content;
 }
 
 function fetchRole() {
@@ -212,12 +255,20 @@ function doLogout() {
     apiCall("/api/logout", {}, function(res) {showLogin();});
 }
 function doMyImages() {
-    apiCall("/api/myimages", {limit: 100, offset: 0}, function(res) {
+    currentRoute = '/api/myimages';
+    currentPage = 0;
+    pageSize = PAGESIZE_MYIMAGES;
+    currentPayload = {limit: pageSize, offset: 0}
+    apiCall(currentRoute, currentPayload, function(res) {
             showImages(res);
     });
 }
 function doPendingImages() {
-    apiCall("/api/imagespending", {limit: 16, offset: 0}, function(res) {
+    currentRoute = '/api/imagespending';
+    currentPage = 0;
+    pageSize = PAGESIZE_REVIEW;
+    currentPayload = {limit: pageSize, offset: 0}
+    apiCall(currentRoute, currentPayload, function(res) {
             showImages(res);
     });
 }
@@ -227,14 +278,18 @@ function doQuery() {
     var ut = document.getElementById('tUser').value;
     if (ut != '')
         user = parseInt(ut);
-    apiCall("/api/query", {
+    currentRoute = '/api/query';
+    pageSize = PAGESIZE_QUERY;
+    currentPage = 0;
+    currentPayload = {
             validated: document.getElementById('cValidated').checked,
             declined: document.getElementById('cDeclined').checked,
             pending: document.getElementById('cPending').checked,
             key: document.getElementById('tKey').value,
             user: user,
-            page: {limit: 100, offset: 0}
-    }, function(res) {
+            page: {limit: pageSize, offset: 0}
+    }
+    apiCall("/api/query", currentPayload, function(res) {
             showImages(res);
     });
 }
@@ -336,7 +391,11 @@ User menu
   Demo mode: login starts with r for reviewer, u for user . Password is your user id (use below 1000 for reviewers only please).
 </div>
 
-<div id="dImages">
+<div id="dImagesPane" style="display: none;">
+  <div id="dImages">
+  </div>
+  <div id="dPaginator">
+  </div>
 </div>
 <div id="dRole" style="display:none">
   Logged as <span id="dRoleUsername"></span>  with role <span id="dRoleRole"></span>
